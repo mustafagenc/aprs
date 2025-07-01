@@ -150,7 +150,7 @@ node index.js --send
 
 ## 📡 APRS Sembolleri
 
-`aprs-symbols.html` dosyasını tarayıcıda açarak mevcut sembolleri görebilirsiniz.
+[`aprs-symbols.html`](aprs-symbols.html) dosyasını tarayıcıda açarak mevcut sembolleri görebilirsiniz.
 
 ## 🌐 Kontrol
 
@@ -194,4 +194,4 @@ Gönderilen paketleri şu adreslerde kontrol edebilirsiniz:
 
 ## 📄 Lisans
 
-ISC License
+Licensed under the Apache License 2.0 - see [LICENSE](LICENSE) file.
