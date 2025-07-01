@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APRS Sembol Tablosu</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .search-box {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 30px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: #667eea;
+        }
+
+        .category-tabs {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        .tab.active, .tab:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .symbols-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .symbol-card {
+            background: white;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .symbol-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .symbol-graphic {
+            font-size: 3em;
+            margin-bottom: 10px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .symbol-code {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #333;
+            background: #f8f8f8;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+
+        .symbol-name {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 5px;
+        }
+
+        .symbol-description {
+            font-size: 0.9em;
+            color: #777;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .usage-example {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .symbols-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📡 APRS Sembol Tablosu</h1>
+        <p class="subtitle">Automatic Packet Reporting System (APRS) sembol referansı</p>
+        
+        <div class="search-box">
+            <input type="text" class="search-input" placeholder="Sembol ara... (örn: araba, ev, antik)" id="searchInput">
+        </div>
+
+        <div class="category-tabs">
+            <button class="tab active" onclick="filterCategory('all')">Tümü</button>
+            <button class="tab" onclick="filterCategory('vehicles')">Araçlar</button>
+            <button class="tab" onclick="filterCategory('buildings')">Binalar</button>
+            <button class="tab" onclick="filterCategory('stations')">İstasyonlar</button>
+            <button class="tab" onclick="filterCategory('weather')">Hava</button>
+            <button class="tab" onclick="filterCategory('emergency')">Acil</button>
+            <button class="tab" onclick="filterCategory('misc')">Diğer</button>
+        </div>
+
+        <div class="symbols-grid" id="symbolsGrid">
+            <!-- Semboller JavaScript ile doldurulacak -->
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="symbolModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const symbols = [
+            // Araçlar
+            { code: '/>', graphic: '🚗', name: 'Araba', description: 'Kişisel araç', category: 'vehicles' },
+            { code: '/k', graphic: '🚚', name: 'Kamyon', description: 'Ticari araç', category: 'vehicles' },
+            { code: '/Y', graphic: '⛵', name: 'Yelkenli', description: 'Yelkenli tekne', category: 'vehicles' },
+            { code: '/s', graphic: '🚢', name: 'Gemi', description: 'Motorlu tekne', category: 'vehicles' },
+            { code: '/^', graphic: '✈️', name: 'Uçak', description: 'Hava aracı', category: 'vehicles' },
+            { code: '/g', graphic: '🚁', name: 'Helikopter', description: 'Helikopter', category: 'vehicles' },
+            { code: '/b', graphic: '🚲', name: 'Bisiklet', description: 'Bisiklet', category: 'vehicles' },
+            { code: '/m', graphic: '🏍️', name: 'Motosiklet', description: 'Motosiklet', category: 'vehicles' },
+            { code: '/j', graphic: '🚌', name: 'Otobüs', description: 'Toplu taşıma', category: 'vehicles' },
+            { code: '/R', graphic: '🚂', name: 'Tren', description: 'Demiryolu', category: 'vehicles' },
+
+            // Binalar ve Yerler
+            { code: '/-', graphic: '🏠', name: 'Ev', description: 'Konut', category: 'buildings' },
+            { code: '/h', graphic: '🏥', name: 'Hastane', description: 'Sağlık merkezi', category: 'buildings' },
+            { code: '/K', graphic: '🏫', name: 'Okul', description: 'Eğitim kurumu', category: 'buildings' },
+            { code: '/a', graphic: '🚨', name: 'Ambulans', description: 'Acil sağlık', category: 'emergency' },
+            { code: '/f', graphic: '🚒', name: 'İtfaiye', description: 'İtfaiye eri', category: 'emergency' },
+            { code: '/!', graphic: '🚔', name: 'Polis', description: 'Güvenlik', category: 'emergency' },
+            { code: '/+', graphic: '🏥', name: 'Hastane+', description: 'Ana hastane', category: 'buildings' },
+            { code: '/U', graphic: '🏛️', name: 'Belediye', description: 'Resmi bina', category: 'buildings' },
+            { code: '/c', graphic: '☁️', name: 'Bulut', description: 'Hava durumu', category: 'weather' },
+
+            // İstasyonlar ve Antenler
+            { code: '/r', graphic: '📻', name: 'Repeater', description: 'Röle istasyonu', category: 'stations' },
+            { code: '/Z', graphic: '📡', name: 'Yayın', description: 'Yayın istasyonu', category: 'stations' },
+            { code: '/A', graphic: '📶', name: 'Anten', description: 'Anten sistemi', category: 'stations' },
+            { code: '/B', graphic: '🔋', name: 'Batarya', description: 'Güç kaynağı', category: 'stations' },
+            { code: '/T', graphic: '📡', name: 'Transmitter', description: 'Verici', category: 'stations' },
+            { code: '/X', graphic: '❌', name: 'X Işın', description: 'Özel işaretçi', category: 'stations' },
+
+            // Hava Durumu
+            { code: '/_', graphic: '🌧️', name: 'Hava İst.', description: 'Hava durumu istasyonu', category: 'weather' },
+            { code: '/W', graphic: '🌪️', name: 'Rüzgar', description: 'Rüzgar ölçer', category: 'weather' },
+            { code: '/w', graphic: '💧', name: 'Su', description: 'Su seviyesi', category: 'weather' },
+            { code: '/C', graphic: '☁️', name: 'Bulutlu', description: 'Bulutlu hava', category: 'weather' },
+
+            // Acil Durum
+            { code: '/E', graphic: '🚨', name: 'Acil', description: 'Acil durum', category: 'emergency' },
+            { code: '/F', graphic: '🔥', name: 'Yangın', description: 'Yangın', category: 'emergency' },
+            { code: '/P', graphic: '👮', name: 'Polis Patrol', description: 'Polis devriyesi', category: 'emergency' },
+
+            // Diğer
+            { code: '/=', graphic: '📍', name: 'Nokta', description: 'Genel konum', category: 'misc' },
+            { code: '/\\', graphic: '🔺', name: 'Üçgen', description: 'Özel işaret', category: 'misc' },
+            { code: '/O', graphic: '⭕', name: 'Daire', description: 'Merkez nokta', category: 'misc' },
+            { code: '/n', graphic: '📍', name: 'NTS', description: 'Traffic ağı', category: 'misc' },
+            { code: '/0', graphic: '🔴', name: 'Kırmızı', description: 'Kırmızı nokta', category: 'misc' },
+            { code: '/1', graphic: '🔵', name: 'Mavi', description: 'Mavi nokta', category: 'misc' },
+            { code: '/2', graphic: '🟢', name: 'Yeşil', description: 'Yeşil nokta', category: 'misc' },
+            { code: '/3', graphic: '🟡', name: 'Sarı', description: 'Sarı nokta', category: 'misc' },
+            { code: '/v', graphic: '🏔️', name: 'Dağ', description: 'Yüksek nokta', category: 'misc' },
+            { code: '/I', graphic: 'ℹ️', name: 'Bilgi', description: 'Bilgi noktası', category: 'misc' },
+        ];
+
+        let currentFilter = 'all';
+
+        function renderSymbols(symbolsToRender = symbols) {
+            const grid = document.getElementById('symbolsGrid');
+            grid.innerHTML = '';
+
+            symbolsToRender.forEach(symbol => {
+                const card = document.createElement('div');
+                card.className = 'symbol-card';
+                card.setAttribute('data-category', symbol.category);
+                
+                card.innerHTML = `
+                    <div class="symbol-graphic">${symbol.graphic}</div>
+                    <div class="symbol-code">${symbol.code}</div>
+                    <div class="symbol-name">${symbol.name}</div>
+                    <div class="symbol-description">${symbol.description}</div>
+                `;
+
+                card.onclick = () => showModal(symbol);
+                grid.appendChild(card);
+            });
+        }
+
+        function filterCategory(category) {
+            currentFilter = category;
+            
+            // Tab görünümünü güncelle
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Sembolleri filtrele
+            const filteredSymbols = category === 'all' 
+                ? symbols 
+                : symbols.filter(symbol => symbol.category === category);
+            
+            renderSymbols(filteredSymbols);
+        }
+
+        function showModal(symbol) {
+            const modal = document.getElementById('symbolModal');
+            const modalContent = document.getElementById('modalContent');
+            
+            modalContent.innerHTML = `
+                <div class="symbol-graphic" style="font-size: 4em; margin-bottom: 20px;">${symbol.graphic}</div>
+                <h2>${symbol.name}</h2>
+                <div class="symbol-code" style="font-size: 1.2em; margin: 15px 0;">${symbol.code}</div>
+                <p style="margin-bottom: 15px;">${symbol.description}</p>
+                <div class="usage-example">
+                    <strong>Kullanım Örneği:</strong><br>
+                    SYMBOL=${symbol.code}<br>
+                    TB2ABI>APRS:=4100.69N/02907.53E${symbol.code}Test mesajı
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        // Modal kapatma
+        document.querySelector('.close').onclick = function() {
+            document.getElementById('symbolModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('symbolModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Arama fonksiyonu
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            const filteredSymbols = symbols.filter(symbol => {
+                return symbol.name.toLowerCase().includes(searchTerm) ||
+                       symbol.description.toLowerCase().includes(searchTerm) ||
+                       symbol.code.toLowerCase().includes(searchTerm);
+            });
+
+            // Kategori filtresi de uygulanacaksa
+            const finalSymbols = currentFilter === 'all' 
+                ? filteredSymbols 
+                : filteredSymbols.filter(symbol => symbol.category === currentFilter);
+            
+            renderSymbols(finalSymbols);
+        });
+
+        // Sayfa yüklendiğinde sembolleri göster
+        renderSymbols();
+    </script>
+</body>
+</html>
