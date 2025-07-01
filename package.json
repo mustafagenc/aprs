@@ -6,6 +6,10 @@
   "author": "TB2ABI",
   "type": "commonjs",
   "main": "web-server.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mustafagenc/aprs.git"
+    },
   "scripts": {
     "start": "node web-server.js",
     "send": "node index.js --send",

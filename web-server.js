@@ -20,7 +20,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const PORT = process.env.WEB_PORT || 3000;
+const PORT = process.env.PORT || process.env.WEB_PORT || 3000;
 
 // Static dosyalar için middleware
 app.use(express.static('public'));
@@ -220,56 +220,77 @@ server.listen(PORT, () => {
     console.log(`🌐 APRS Web Arayüzü çalışıyor: http://localhost:${PORT}`);
     console.log(`📡 APRS gönderimlerini web üzerinden kontrol edebilirsiniz`);
     
+    // Environment variables debug
+    console.log(`🔍 AUTO_START_ON_DEPLOY: ${process.env.AUTO_START_ON_DEPLOY}`);
+    console.log(`🔍 DEMO_MODE: ${process.env.DEMO_MODE}`);
+    console.log(`🔍 CALLSIGN: ${process.env.CALLSIGN}`);
+    
     // Sunucu başlarken otomatik gönderimi başlat
     if (process.env.AUTO_START_ON_DEPLOY === 'true') {
         console.log('🚀 AUTO_START_ON_DEPLOY aktif - Otomatik gönderim başlatılıyor...');
         
-        // Demo mode kontrolü
+        // Demo mode kontrolü - uyarı ver ama devam et
         if (process.env.DEMO_MODE === 'true') {
             console.log(`🚫 Demo Mode aktif: ${process.env.DEMO_MESSAGE || 'APRS gönderimi devre dışıdır.'}`);
-            return;
+            console.log('⚠️ Demo mode aktif olmasına rağmen AUTO_START_ON_DEPLOY nedeniyle gönderim başlatılıyor...');
         }
         
-        // Otomatik gönderimi başlat
+        // Otomatik gönderimi başlat (her durumda)
         setTimeout(() => {
             if (!activeProcesses.auto) {
                 console.log('📡 Deployment sonrası otomatik APRS gönderimi başlatılıyor...');
                 
-                activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
-                    cwd: __dirname
-                });
+                try {
+                    activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
+                        cwd: __dirname,
+                        stdio: ['pipe', 'pipe', 'pipe']
+                    });
 
-                activeProcesses.auto.stdout.on('data', (data) => {
-                    const message = data.toString().trim();
-                    console.log(`[AUTO] ${message}`);
-                    // Tüm bağlı socket'lere log gönder
-                    io.emit('log', { type: 'info', message: `🤖 ${message}` });
-                });
+                    activeProcesses.auto.stdout.on('data', (data) => {
+                        const message = data.toString().trim();
+                        if (message) {
+                            console.log(`[AUTO] ${message}`);
+                            // Tüm bağlı socket'lere log gönder
+                            io.emit('log', { type: 'info', message: `🤖 ${message}` });
+                        }
+                    });
 
-                activeProcesses.auto.stderr.on('data', (data) => {
-                    const message = data.toString().trim();
-                    console.error(`[AUTO ERROR] ${message}`);
-                    io.emit('log', { type: 'error', message: `❌ ${message}` });
-                });
+                    activeProcesses.auto.stderr.on('data', (data) => {
+                        const message = data.toString().trim();
+                        if (message) {
+                            console.error(`[AUTO ERROR] ${message}`);
+                            io.emit('log', { type: 'error', message: `❌ ${message}` });
+                        }
+                    });
 
-                activeProcesses.auto.on('close', (code) => {
-                    console.log(`[AUTO] Process kapandı - kod: ${code}`);
-                    activeProcesses.auto = null;
-                    io.emit('log', { type: 'warning', message: `⚠️ Otomatik gönderim durdu (kod: ${code})` });
-                    io.emit('status', { auto: false, send: false });
-                });
+                    activeProcesses.auto.on('close', (code) => {
+                        console.log(`[AUTO] Process kapandı - kod: ${code}`);
+                        activeProcesses.auto = null;
+                        io.emit('log', { type: 'warning', message: `⚠️ Otomatik gönderim durdu (kod: ${code})` });
+                        io.emit('status', { auto: false, send: false });
+                    });
 
-                activeProcesses.auto.on('error', (error) => {
-                    console.error(`[AUTO ERROR] Process hatası:`, error);
-                    activeProcesses.auto = null;
-                    io.emit('log', { type: 'error', message: `❌ Otomatik gönderim hatası: ${error.message}` });
-                    io.emit('status', { auto: false, send: false });
-                });
-                
-                // Status güncelle
-                io.emit('status', { auto: true, send: false });
-                io.emit('log', { type: 'info', message: '🚀 Deployment sonrası otomatik gönderim başlatıldı!' });
+                    activeProcesses.auto.on('error', (error) => {
+                        console.error(`[AUTO ERROR] Process hatası:`, error);
+                        activeProcesses.auto = null;
+                        io.emit('log', { type: 'error', message: `❌ Otomatik gönderim hatası: ${error.message}` });
+                        io.emit('status', { auto: false, send: false });
+                    });
+                    
+                    // Status güncelle
+                    io.emit('status', { auto: true, send: false });
+                    io.emit('log', { type: 'info', message: '🚀 Deployment sonrası otomatik gönderim başlatıldı!' });
+                    console.log('✅ Auto start process başarıyla oluşturuldu');
+                    
+                } catch (error) {
+                    console.error('❌ Auto start spawn hatası:', error);
+                    io.emit('log', { type: 'error', message: `❌ Auto start hatası: ${error.message}` });
+                }
+            } else {
+                console.log('⚠️ Auto process zaten çalışıyor, yeni başlatılmadı');
             }
         }, 2000); // 2 saniye bekle ki server tamamen hazır olsun
+    } else {
+        console.log('ℹ️ AUTO_START_ON_DEPLOY false veya tanımlı değil - otomatik başlatma yok');
     }
 });
