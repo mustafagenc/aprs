@@ -3,7 +3,18 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const { spawn } = require('child_process');
+const fs = require('fs');
 require('dotenv').config();
+
+// Package.json'dan versiyon bilgisini oku
+let packageInfo = {};
+try {
+    const packageData = fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8');
+    packageInfo = JSON.parse(packageData);
+} catch (error) {
+    console.warn('Package.json okunamadı:', error.message);
+    packageInfo = { name: 'APRS-FI', version: '1.0.0' };
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -32,7 +43,9 @@ app.get('/api/config', (req, res) => {
         interval: process.env.AUTO_SEND_INTERVAL || '600',
         count: process.env.AUTO_SEND_COUNT || '10',
         demoMode: process.env.DEMO_MODE === 'true',
-        demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.'
+        demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
+        version: packageInfo.version || '1.0.0',
+        appName: packageInfo.name || 'APRS-FI'
     });
 });
 
@@ -57,7 +70,9 @@ io.on('connection', (socket) => {
         interval: process.env.AUTO_SEND_INTERVAL || '600',
         count: process.env.AUTO_SEND_COUNT || '10',
         demoMode: process.env.DEMO_MODE === 'true',
-        demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.'
+        demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
+        version: packageInfo.version || '1.0.0',
+        appName: packageInfo.name || 'APRS-FI'
     });
 
     // Otomatik gönderim başlat
