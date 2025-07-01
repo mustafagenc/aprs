@@ -168,14 +168,14 @@ class APRSPositionSender {
 			symbol
 		);
 
-		log('📋 Gönderilecek Paket Bilgileri:');
-		log('=====================================');
-		log(`📍 İstasyon: ${callsign}`);
-		log(`🌍 Konum: ${latitude}°, ${longitude}°`);
-		log(`💬 Yorum: ${comment || 'Yok'}`);
-		log(`🔣 Sembol: ${symbol}`);
-		log(`📦 Paket: ${packet}`);
-		log('=====================================');
+		log('\n📋 Gönderilecek Paket Bilgileri:\n');
+		log('=====================================\n');
+		log(`📍 İstasyon: ${callsign}\n`);
+		log(`🌍 Konum: ${latitude}°, ${longitude}°\n`);
+		log(`💬 Yorum: ${comment || 'Yok'}\n`);
+		log(`🔣 Sembol: ${symbol}\n`);
+		log(`📦 Paket: ${packet}\n`);
+		log('=====================================\n');
 
 		// APRS-IS bağlantısı kur
 		const client = new APRSISClient(server, port, callsign, passcode);

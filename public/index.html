@@ -8,7 +8,21 @@
     <!-- Favicon ve Web App Manifest -->
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/                //                { label: '🔣 Sembol', value: config.symbol }               { label: '🔣 Sembol', value: config.symbol }Kartları tek satırda organize et
+            const allCards = [
+                { label: '📡 Çağrı İşareti', value: config.callsign },
+                { label: '🌍 Enlem', value: config.latitude + '°' },
+                { label: '🌍 Boylam', value: config.longitude + '°' },
+                { label: '🔣 Sembol', value: config.symbol },
+                { label: '⏰ Aralık', value: config.interval + ' sn' },
+                { label: '🔢 Maksimum', value: config.count + ' paket' },
+                { label: '💬 Yorum', value: config.comment, isComment: true }
+            ];opRowCards = [
+                { label: '📡 Çağrı İşareti', value: config.callsign },
+                { label: '🌍 Enlem', value: config.latitude + '°' },
+                { label: '🌍 Boylam', value: config.longitude + '°' },
+                { label: '🔣 Sembol', value: config.symbol } 
+            ];n-16x16.png">
     <link rel="manifest" href="/favicon/site.webmanifest">
     <link rel="shortcut icon" href="/favicon/favicon.ico">
     
@@ -330,7 +344,7 @@
                 </button>
                 
                 <button id="sendStatusBtn" class="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-medium px-4 py-3 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 group">
-                    <span class="text-xl group-hover:animate-pulse">📢</span>
+                    <span class="text-xl group-hover:animate-pulse">🚗</span>
                     <span class="text-sm sm:text-base">Durum Gönder</span>
                 </button>
                 
@@ -360,7 +374,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="text-center mt-8 pt-6 border-t border-gray-600/40">
+        <div class="text-center mt-8 pt-6">
             <p class="text-gray-200">
                 🎯 APRS Position Sender by 
                 <a href="https://mustafagenc.info" class="text-blue-400 hover:text-blue-300 font-semibold" target="_blank">
@@ -482,22 +496,27 @@
 
         // Konfigürasyon kartlarını oluştur
         function createConfigCards(config) {
-            const cards = [
+            // Kartları yeni düzene göre organize et
+            const topRowCards = [
                 { label: '📡 Çağrı İşareti', value: config.callsign },
                 { label: '🌍 Enlem', value: config.latitude + '°' },
                 { label: '🌍 Boylam', value: config.longitude + '°' },
-                { label: '💬 Yorum', value: config.comment },
-                { label: '🔣 Sembol', value: config.symbol },
+                { label: '🔣 Sembol', value: config.symbol } 
+            ];
+            
+            const bottomRowCards = [
                 { label: '⏰ Aralık', value: config.interval + ' sn' },
                 { label: '🔢 Maksimum', value: config.count + ' paket' },
-                { label: '✅ Otomatik', value: config.autoEnabled ? 'Aktif' : 'Devre Dışı' }
+                { label: '💬 Yorum', value: config.comment, span: 'col-span-2', isComment: true } 
             ];
 
-            configGrid.innerHTML = cards.map(card => `
-                <div class="bg-gray-800/30 backdrop-blur-sm border border-gray-600/40 rounded-lg p-3 transform transition-all duration-300 hover:scale-105 hover:bg-gray-700/40">
+            const allCards = [...topRowCards, ...bottomRowCards];
+
+            configGrid.innerHTML = allCards.map(card => `
+                <div class="bg-gray-800/30 backdrop-blur-sm border border-gray-600/40 rounded-lg p-3 transform transition-all duration-300 hover:scale-105 hover:bg-gray-700/40 ${card.span || ''}">
                     <div class="flex justify-between items-center">
                         <div class="text-xs font-medium text-gray-300">${card.label}</div>
-                        <div class="text-sm font-bold text-gray-100 font-mono bg-gray-700/40 rounded px-2 py-1 truncate max-w-24" title="${card.value}">
+                        <div class="text-sm font-bold text-gray-100 font-mono bg-gray-700/40 rounded px-2 py-1 ${card.isComment ? 'flex-1 ml-2 break-words' : 'truncate max-w-24'}" title="${card.value}">
                             ${card.value}
                         </div>
                     </div>
