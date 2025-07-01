@@ -219,4 +219,57 @@ process.on('SIGINT', () => {
 server.listen(PORT, () => {
     console.log(`🌐 APRS Web Arayüzü çalışıyor: http://localhost:${PORT}`);
     console.log(`📡 APRS gönderimlerini web üzerinden kontrol edebilirsiniz`);
+    
+    // Sunucu başlarken otomatik gönderimi başlat
+    if (process.env.AUTO_START_ON_DEPLOY === 'true') {
+        console.log('🚀 AUTO_START_ON_DEPLOY aktif - Otomatik gönderim başlatılıyor...');
+        
+        // Demo mode kontrolü
+        if (process.env.DEMO_MODE === 'true') {
+            console.log(`🚫 Demo Mode aktif: ${process.env.DEMO_MESSAGE || 'APRS gönderimi devre dışıdır.'}`);
+            return;
+        }
+        
+        // Otomatik gönderimi başlat
+        setTimeout(() => {
+            if (!activeProcesses.auto) {
+                console.log('📡 Deployment sonrası otomatik APRS gönderimi başlatılıyor...');
+                
+                activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
+                    cwd: __dirname
+                });
+
+                activeProcesses.auto.stdout.on('data', (data) => {
+                    const message = data.toString().trim();
+                    console.log(`[AUTO] ${message}`);
+                    // Tüm bağlı socket'lere log gönder
+                    io.emit('log', { type: 'info', message: `🤖 ${message}` });
+                });
+
+                activeProcesses.auto.stderr.on('data', (data) => {
+                    const message = data.toString().trim();
+                    console.error(`[AUTO ERROR] ${message}`);
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                });
+
+                activeProcesses.auto.on('close', (code) => {
+                    console.log(`[AUTO] Process kapandı - kod: ${code}`);
+                    activeProcesses.auto = null;
+                    io.emit('log', { type: 'warning', message: `⚠️ Otomatik gönderim durdu (kod: ${code})` });
+                    io.emit('status', { auto: false, send: false });
+                });
+
+                activeProcesses.auto.on('error', (error) => {
+                    console.error(`[AUTO ERROR] Process hatası:`, error);
+                    activeProcesses.auto = null;
+                    io.emit('log', { type: 'error', message: `❌ Otomatik gönderim hatası: ${error.message}` });
+                    io.emit('status', { auto: false, send: false });
+                });
+                
+                // Status güncelle
+                io.emit('status', { auto: true, send: false });
+                io.emit('log', { type: 'info', message: '🚀 Deployment sonrası otomatik gönderim başlatıldı!' });
+            }
+        }, 2000); // 2 saniye bekle ki server tamamen hazır olsun
+    }
 });

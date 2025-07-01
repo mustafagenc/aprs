@@ -3,16 +3,27 @@
   "version": "1.0.0",
   "description": "APRS Position Packet Generator with APRS-IS Support",
   "license": "ISC",
-  "author": "",
+  "author": "TB2ABI",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "web-server.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node web-server.js",
     "send": "node index.js --send",
     "auto": "node index.js --auto",
     "web": "node web-server.js",
+    "cli": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": [
+    "aprs",
+    "amateur-radio",
+    "position-sender",
+    "aprs-is",
+    "ham-radio"
+  ],
   "dependencies": {
     "dotenv": "^16.3.0",
     "net": "^1.0.0",
