@@ -4,10 +4,12 @@ require('dotenv').config();
 // Log wrapper - sadece console'a yaz (web-server.js zaten stdout'u yakalıyor)
 function log(message) {
     console.log(message);
+    return; // Explicitly return void to prevent undefined
 }
 
 function logError(message) {
     console.error(message);
+    return; // Explicitly return void to prevent undefined
 }
 
 // APRS-IS Client
@@ -244,6 +246,243 @@ class APRSPositionSender {
         
         return packet;
     }
+
+    /**
+     * APRS durum paketi oluştur
+     * @param {string} callsign - Çağrı işareti
+     * @param {string} status - Durum mesajı
+     * @returns {string} - APRS status paketi
+     */
+    createStatusPacket(callsign, status) {
+        // APRS status paketi formatı: CALLSIGN>APRS:>STATUS_MESSAGE
+        const packet = `${callsign}>APRS:>${status}`;
+        return packet;
+    }
+
+    /**
+     * Durum gönderimi (.env dosyasından bilgileri alarak) - Gerçek gönderim
+     */
+    async sendStatusToAPRSIS() {
+        const callsign = process.env.CALLSIGN;
+        const status = process.env.APRS_STATUS || '';
+        const server = process.env.APRS_IS_SERVER || 'euro.aprs2.net';
+        const port = parseInt(process.env.APRS_IS_PORT) || 14580;
+        const passcode = process.env.APRS_IS_PASSCODE || '-1';
+
+        // Gerekli bilgileri kontrol et
+        if (!callsign) {
+            logError('❌ CALLSIGN .env dosyasında bulunamadı!');
+            return false;
+        }
+
+        if (!status) {
+            logError('❌ APRS_STATUS .env dosyasında bulunamadı!');
+            logError('ℹ️  Örnek: APRS_STATUS=QRV 144.800 MHz FM - Online and monitoring');
+            return false;
+        }
+
+        log('🚀 APRS-IS Durum Gönderimi Başlatılıyor...');
+
+        const packet = this.createStatusPacket(callsign, status);
+        
+        log('📋 Gönderilecek Durum Paketi Bilgileri:');
+        log('=====================================');
+        log(`📍 İstasyon: ${callsign}`);
+        log(`📢 Durum: ${status}`);
+        log(`📦 Paket: ${packet}`);
+        log('=====================================');
+
+        // APRS-IS bağlantısı kur
+        const client = new APRSISClient(server, port, callsign, passcode);
+
+        try {
+            const verified = await client.connect();
+            
+            if (passcode === '-1') {
+                log('⚠️  PASSCODE ayarlanmamış (-1)');
+                log('ℹ️  Sadece dinleme modu - durum paketi gönderilmeyecek');
+                log('ℹ️  Gerçek gönderim için geçerli passcode gerekli');
+                
+                // Simülasyon olarak bekle
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                client.disconnect();
+                return false;
+            }
+
+            if (!verified) {
+                log('⚠️  Giriş doğrulanmadı - durum paketi gönderilmeyecek');
+                client.disconnect();
+                return false;
+            }
+
+            // Paketi gönder
+            log('📡 Durum paketi APRS ağına gönderiliyor...');
+            client.sendPacket(packet);
+            
+            // Biraz bekle sonra bağlantıyı kapat
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            client.disconnect();
+            
+            log('✅ Durum paketi başarıyla APRS ağına gönderildi!');
+            log('🌐 https://aprs.fi adresinden kontrol edebilirsiniz.');
+            
+            return true;
+
+        } catch (error) {
+            logError('❌ APRS-IS durum gönderim hatası:', error.message);
+            client.disconnect();
+            return false;
+        }
+    }
+
+    /**
+     * Durum gönderimi (.env dosyasından bilgileri alarak) - Simülasyon
+     */
+    sendStatusFromEnv() {
+        const callsign = process.env.CALLSIGN;
+        const status = process.env.APRS_STATUS || '';
+
+        // Gerekli bilgileri kontrol et
+        if (!callsign) {
+            logError('❌ CALLSIGN .env dosyasında bulunamadı!');
+            return null;
+        }
+
+        if (!status) {
+            logError('❌ APRS_STATUS .env dosyasında bulunamadı!');
+            logError('ℹ️  Örnek: APRS_STATUS=QRV 144.800 MHz FM - Online and monitoring');
+            return null;
+        }
+
+        const packet = this.createStatusPacket(callsign, status);
+        
+        log('📢 APRS Durum Paketi Oluşturuldu (Simülasyon)');
+        log('=====================================');
+        log(`📍 İstasyon: ${callsign}`);
+        log(`📢 Durum: ${status}`);
+        log('=====================================');
+        log(`📦 Paket: ${packet}`);
+        log('=====================================');
+        log('ℹ️  Bu simülasyon modu - gerçek gönderim için:');
+        log('   node index.js --status');
+        
+        return packet;
+    }
+
+    /**
+     * Sistem durum bilgisi oluştur (otomatik)
+     * @returns {string} - Sistem durumu
+     */
+    generateSystemStatus() {
+        const now = new Date();
+        const uptime = process.uptime();
+        const uptimeHours = Math.floor(uptime / 3600);
+        const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+        
+        // Sistem bilgileri
+        const memUsage = process.memoryUsage();
+        const memUsedMB = Math.round(memUsage.rss / 1024 / 1024);
+        
+        // Node.js versiyon
+        const nodeVersion = process.version;
+        
+        // Durum mesajı oluştur
+        const status = `QRV Node${nodeVersion} UP:${uptimeHours}h${uptimeMinutes}m RAM:${memUsedMB}MB`;
+        
+        return status;
+    }
+
+    /**
+     * Durum gönderimi (.env dosyasından bilgileri alarak)
+     * @param {string} customStatus - Özel durum mesajı (opsiyonel)
+     * @param {boolean} includeSystemInfo - Sistem bilgisi dahil et
+     */
+    async sendStatusToAPRSIS(customStatus = null, includeSystemInfo = true) {
+        const callsign = process.env.CALLSIGN;
+        const server = process.env.APRS_IS_SERVER || 'euro.aprs2.net';
+        const port = parseInt(process.env.APRS_IS_PORT) || 14580;
+        const passcode = process.env.APRS_IS_PASSCODE || '-1';
+
+        // Gerekli bilgileri kontrol et
+        if (!callsign) {
+            logError('❌ CALLSIGN .env dosyasında bulunamadı!');
+            return false;
+        }
+
+        log('📢 APRS Durum Bilgisi Gönderimi Başlatılıyor...');
+
+        // Durum mesajını hazırla
+        let statusMessage;
+        if (customStatus) {
+            statusMessage = customStatus;
+            if (includeSystemInfo) {
+                const systemStatus = this.generateSystemStatus();
+                statusMessage += ` | ${systemStatus}`;
+            }
+        } else {
+            // .env'den özel durum al
+            const envStatus = process.env.APRS_STATUS || 'QRV on 145.500 MHz';
+            statusMessage = envStatus;
+            if (includeSystemInfo) {
+                const systemStatus = this.generateSystemStatus();
+                statusMessage += ` | ${systemStatus}`;
+            }
+        }
+
+        // Zaman damgası oluştur (DHMz formatında)
+        const now = new Date();
+        const day = now.getUTCDate().toString().padStart(2, '0');
+        const hour = now.getUTCHours().toString().padStart(2, '0');
+        const minute = now.getUTCMinutes().toString().padStart(2, '0');
+        const timestamp = `${day}${hour}${minute}z`;
+
+        const packet = this.createStatusPacket(callsign, statusMessage, timestamp);
+        
+        log('📢 Gönderilecek Durum Bilgisi:');
+        log('=====================================');
+        log(`📍 İstasyon: ${callsign}`);
+        log(`📢 Durum: ${statusMessage}`);
+        log(`⏰ Zaman: ${timestamp} UTC`);
+        log(`📦 Paket: ${packet}`);
+        log('=====================================');
+
+        // APRS-IS bağlantısı kur
+        const client = new APRSISClient(server, port, callsign, passcode);
+
+        try {
+            const verified = await client.connect();
+            
+            if (passcode === '-1') {
+                log('⚠️  PASSCODE ayarlanmamış (-1)');
+                log('ℹ️  Sadece dinleme modu - paket gönderilmeyecek');
+                return false;
+            }
+
+            if (!verified) {
+                log('⚠️  Giriş doğrulanmadı - paket gönderilmeyecek');
+                client.disconnect();
+                return false;
+            }
+
+            // Paketi gönder
+            log('📢 Durum bilgisi APRS ağına gönderiliyor...');
+            client.sendPacket(packet);
+            
+            // Biraz bekle sonra bağlantıyı kapat
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            client.disconnect();
+            
+            log('✅ Durum bilgisi başarıyla APRS ağına gönderildi!');
+            log('🌐 https://aprs.fi adresinden kontrol edebilirsiniz.');
+            
+            return true;
+
+        } catch (error) {
+            logError('❌ APRS durum gönderim hatası:', error.message);
+            client.disconnect();
+            return false;
+        }
+    }
 }
 
 // Passcode hesaplama fonksiyonu
@@ -262,11 +501,58 @@ function calculatePasscode(callsign) {
     return hash & 0x7fff;
 }
 
+// CLI kullanım talimatları
+function showHelp() {
+    console.log(`
+🌟 APRS-IS Konum ve Durum Gönderici v${require('./package.json').version}
+==================================================================
+
+Kullanım:
+  node index.js [seçenekler]
+
+Seçenekler:
+  --help          Bu yardım mesajını göster
+  --send          Gerçek gönderim yap (simülasyon değil)
+  --auto          Otomatik periyodik gönderim
+  --status        Durum paketi gönder (APRS_STATUS)
+  
+Ortam Değişkenleri (.env dosyası):
+  CALLSIGN=         Çağrı işareti (zorunlu)
+  APRS_IS_PASSCODE= APRS-IS passcode (zorunlu, gerçek gönderim için)
+  LATITUDE=         Enlem
+  LONGITUDE=        Boylam
+  APRS_STATUS=      Durum mesajı
+  
+Örnekler:
+  node index.js                    # Konum simülasyonu
+  node index.js --send             # Gerçek konum gönderimi
+  node index.js --auto             # Otomatik periyodik gönderim
+  node index.js --status           # Durum paketi simülasyonu
+  node index.js --status --send    # Gerçek durum gönderimi
+  
+NPM Scripts:
+  npm run send                     # Gerçek konum gönder
+  npm run auto                     # Otomatik gönderim
+  npm run status                   # Durum paketi gönder
+  npm run web                      # Web arayüzü başlat
+`);
+}
+
+// CLI parametrelerini işle
+const args = process.argv.slice(2);
+const isHelp = args.includes('--help');
+
+if (isHelp) {
+    showHelp();
+    process.exit(0);
+}
+
 // Ana fonksiyon
 async function main() {
     const args = process.argv.slice(2);
     const shouldSend = args.includes('--send');
     const autoMode = args.includes('--auto');
+    const isStatus = args.includes('--status');
     
     if (autoMode) {
         log('🔄 APRS Otomatik Gönderim Modu');
@@ -274,8 +560,36 @@ async function main() {
         return;
     }
     
+    if (isStatus) {
+        log('📢 APRS Durum Paketi Gönderimi');
+        
+        const sender = new APRSPositionSender();
+        
+        if (shouldSend) {
+            // Gerçek durum gönderimi
+            const success = await sender.sendStatusToAPRSIS();
+            
+            if (success) {
+                log('✨ Durum paketi başarıyla gönderildi!');
+            } else {
+                log('❌ Durum gönderimi başarısız! Ayarları kontrol edin.');
+            }
+        } else {
+            // Simülasyon modu
+            const packet = sender.sendStatusFromEnv();
+            
+            if (packet) {
+                log('✨ Durum paketi oluşturuldu! (Simülasyon)');
+                log('📡 Gerçek gönderim için: node index.js --status --send');
+            } else {
+                log('❌ Durum paketi oluşturulamadı! .env dosyasını kontrol edin.');
+            }
+        }
+        return;
+    }
+    
     if (shouldSend) {
-        log('🚀 APRS-IS Gerçek Gönderim Modu');
+        log('🚀 APRS-IS Gerçek Konum Gönderim Modu');
     } else {
         log('🚀 APRS Pozisyon Gönderici (Simülasyon Modu)');
     }
@@ -311,6 +625,7 @@ async function main() {
             log('✨ Paket oluşturuldu! (Simülasyon)');
             log('📡 Gerçek gönderim için: node index.js --send');
             log('🔄 Otomatik gönderim için: node index.js --auto');
+            log('📢 Durum gönderimi için: node index.js --status');
         } else {
             log('❌ Paket oluşturulamadı! .env dosyasını kontrol edin.');
         }

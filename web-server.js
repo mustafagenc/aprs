@@ -6,6 +6,9 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 require('dotenv').config();
 
+// APRS sınıflarını import et
+const { APRSPositionSender, APRSISClient, calculatePasscode } = require('./index.js');
+
 // Package.json'dan versiyon bilgisini oku
 let packageInfo = {};
 try {
@@ -21,6 +24,13 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 const PORT = process.env.PORT || process.env.WEB_PORT || 3000;
+
+// Log helper fonksiyonu - undefined döndürmesini engeller
+function emitLog(type, message) {
+    io.emit('log', { type, message });
+    // Explicitly return void to prevent undefined in console
+    return;
+}
 
 // Static dosyalar için middleware
 app.use(express.static('public'));
@@ -186,6 +196,43 @@ io.on('connection', (socket) => {
         io.emit('clear-logs');
     });
 
+    // Durum bilgisi gönder
+    socket.on('send-status', () => {
+        // Demo mode kontrolü
+        if (process.env.DEMO_MODE === 'true') {
+            socket.emit('log', { 
+                type: 'warning', 
+                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+            });
+            return;
+        }
+
+        socket.emit('log', { type: 'info', message: '📢 Durum bilgisi gönderiliyor...' });
+        
+        const statusProcess = spawn('node', ['index.js', '--status'], {
+            cwd: __dirname
+        });
+
+        statusProcess.stdout.on('data', (data) => {
+            const message = data.toString().trim();
+            if (message) {
+                io.emit('log', { type: 'info', message: message });
+            }
+        });
+
+        statusProcess.stderr.on('data', (data) => {
+            const message = data.toString().trim();
+            if (message) {
+                io.emit('log', { type: 'error', message: `❌ ${message}` });
+            }
+        });
+
+        statusProcess.on('close', (code) => {
+            const message = `📢 Durum gönderimi tamamlandı (Exit code: ${code})`;
+            io.emit('log', { type: 'info', message: message });
+        });
+    });
+
     // Bağlantı koptuğunda
     socket.on('disconnect', () => {
         console.log('🌐 Web arayüzü bağlantısı kesildi:', socket.id);
@@ -196,6 +243,42 @@ io.on('connection', (socket) => {
         auto: !!activeProcesses.auto, 
         send: !!activeProcesses.send 
     });
+});
+
+// Durum gönderimi endpoint'i
+app.post('/send-status', async (req, res) => {
+    try {
+        if (process.env.DEMO_MODE === 'true') {
+            emitLog('warning', '⚠️ Demo modunda - durum paketi simülasyonu');
+            
+            const sender = new APRSPositionSender();
+            const packet = sender.sendStatusFromEnv();
+            
+            if (packet) {
+                emitLog('info', `📢 Demo Durum Paketi: ${packet}`);
+                res.json({ success: true, message: 'Demo durum paketi oluşturuldu', packet });
+            } else {
+                res.json({ success: false, message: 'Durum paketi oluşturulamadı' });
+            }
+            return;
+        }
+
+        emitLog('info', '🚀 Durum paketi gönderimi başlatıldı...');
+        
+        const sender = new APRSPositionSender();
+        const success = await sender.sendStatusToAPRSIS();
+        
+        if (success) {
+            emitLog('success', '✅ Durum paketi başarıyla gönderildi!');
+            res.json({ success: true, message: 'Durum paketi gönderildi' });
+        } else {
+            emitLog('error', '❌ Durum paketi gönderilemedi');
+            res.json({ success: false, message: 'Durum paketi gönderilemedi' });
+        }
+    } catch (error) {
+        emitLog('error', `❌ Durum gönderim hatası: ${error.message}`);
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
 // Graceful shutdown

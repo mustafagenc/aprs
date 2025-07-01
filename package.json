@@ -12,10 +12,12 @@
     },
   "scripts": {
     "start": "node web-server.js",
-    "send": "node index.js --send",
-    "auto": "node index.js --auto",
-    "web": "node web-server.js",
     "cli": "node index.js",
+    "simulate": "node index.js --simulate",
+    "send": "node index.js --send", 
+    "auto": "node index.js --auto",
+    "status": "node index.js --status",
+    "web": "node web-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {

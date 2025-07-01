@@ -139,6 +139,10 @@ node index.js
 npm run send
 # veya: node index.js --send
 
+# Durum paketi gönder
+npm run status
+# veya: node index.js --status
+
 # Otomatik gönderim  
 npm run auto
 # veya: node index.js --auto
@@ -147,6 +151,30 @@ npm run auto
 npm run web
 # veya: node web-server.js
 ```
+
+### 📢 APRS Durum (Status) Gönderimi
+
+APRS ağında sadece konum değil, istasyonunuzun durumunu da paylaşabilirsiniz:
+
+```bash
+# .env dosyasında durum mesajını ayarlayın
+APRS_STATUS=QRV 144.800 MHz FM - Online and monitoring
+
+# Durum paketi gönder
+npm run status
+```
+
+**Status Mesajı Örnekleri:**
+- `QRV 144.800 MHz FM - Online and monitoring`
+- `Mobile station - En route to contest`
+- `Fixed station - Repeater operator`
+- `QRT - Going offline for maintenance`
+- `Contest station - CQ CQWW SSB`
+
+**Web Arayüzünde Durum Gönderimi:**
+- 🟣 **"Durum Gönder" Butonu** - Mor renkli, 📢 ikonu
+- ✅ **Demo Mode Desteği** - Güvenli test için simülasyon
+- 📋 **Gerçek Zamanlı Log** - Durum paketi detayları görünür
 
 ## 📊 Sabit İstasyon - Gönderim Aralıkları
 

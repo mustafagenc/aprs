@@ -318,7 +318,7 @@
 
         <!-- Controls -->
         <div class="mb-6">
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
                 <button id="startAutoBtn" class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium px-4 py-3 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 group">
                     <span class="text-xl group-hover:animate-pulse">🚀</span>
                     <span class="text-sm sm:text-base">Otomatik Başlat</span>
@@ -327,6 +327,11 @@
                 <button id="sendOnceBtn" class="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-medium px-4 py-3 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 group">
                     <span class="text-xl group-hover:animate-pulse">📡</span>
                     <span class="text-sm sm:text-base">Tek Gönderim</span>
+                </button>
+                
+                <button id="sendStatusBtn" class="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-medium px-4 py-3 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 group">
+                    <span class="text-xl group-hover:animate-pulse">📢</span>
+                    <span class="text-sm sm:text-base">Durum Gönder</span>
                 </button>
                 
                 <button id="stopAutoBtn" class="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-medium px-4 py-3 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg shadow disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 group" disabled>
@@ -394,6 +399,7 @@
         // DOM elementleri
         const startAutoBtn = document.getElementById('startAutoBtn');
         const sendOnceBtn = document.getElementById('sendOnceBtn');
+        const sendStatusBtn = document.getElementById('sendStatusBtn');
         const stopAutoBtn = document.getElementById('stopAutoBtn');
         const clearLogsBtn = document.getElementById('clearLogsBtn');
         const logContainer = document.getElementById('logContainer');
@@ -537,11 +543,13 @@
             if (config && config.demoMode) {
                 startAutoBtn.disabled = true;
                 sendOnceBtn.disabled = true;
+                sendStatusBtn.disabled = true;
                 stopAutoBtn.disabled = true;
             } else {
                 startAutoBtn.disabled = status.auto;
                 stopAutoBtn.disabled = !status.auto;
                 sendOnceBtn.disabled = status.send;
+                sendStatusBtn.disabled = false;
             }
         }
 
@@ -561,6 +569,7 @@
                 // Butonları devre dışı bırak
                 startAutoBtn.disabled = true;
                 sendOnceBtn.disabled = true;
+                sendStatusBtn.disabled = true;
                 
                 addLog('warning', `🚫 Demo Mode: ${data.demoMessage}`);
             }
@@ -587,6 +596,32 @@
         sendOnceBtn.addEventListener('click', () => {
             socket.emit('send-once');
             addLog('info', '📡 Tek gönderim talebi gönderildi...');
+        });
+
+        sendStatusBtn.addEventListener('click', async () => {
+            addLog('info', '📢 Durum paketi gönderim talebi gönderildi...');
+            
+            try {
+                const response = await fetch('/send-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addLog('success', `✅ ${result.message}`);
+                    if (result.packet) {
+                        addLog('info', `📦 Paket: ${result.packet}`);
+                    }
+                } else {
+                    addLog('error', `❌ ${result.message}`);
+                }
+            } catch (error) {
+                addLog('error', `❌ Durum gönderim hatası: ${error.message}`);
+            }
         });
 
         stopAutoBtn.addEventListener('click', () => {
