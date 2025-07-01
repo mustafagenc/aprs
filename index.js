@@ -1,6 +1,15 @@
 const net = require('net');
 require('dotenv').config();
 
+// Log wrapper - sadece console'a yaz (web-server.js zaten stdout'u yakalıyor)
+function log(message) {
+    console.log(message);
+}
+
+function logError(message) {
+    console.error(message);
+}
+
 // APRS-IS Client
 class APRSISClient {
     constructor(server, port, callsign, passcode) {
@@ -17,40 +26,40 @@ class APRSISClient {
      */
     connect() {
         return new Promise((resolve, reject) => {
-            console.log(`🔗 APRS-IS sunucusuna bağlanılıyor: ${this.server}:${this.port}`);
+            log(`🔗 APRS-IS sunucusuna bağlanılıyor: ${this.server}:${this.port}`);
             
             this.socket = new net.Socket();
             
             this.socket.connect(this.port, this.server, () => {
-                console.log('✅ APRS-IS sunucusuna bağlandı');
+                log('✅ APRS-IS sunucusuna bağlandı');
                 this.connected = true;
                 
                 // Login paketi gönder
                 const loginPacket = `user ${this.callsign} pass ${this.passcode} vers NodeAPRS 1.0\r\n`;
                 this.socket.write(loginPacket);
-                console.log(`📤 Login paketi gönderildi: ${loginPacket.trim()}`);
+                log(`📤 Login paketi gönderildi: ${loginPacket.trim()}`);
             });
 
             this.socket.on('data', (data) => {
                 const message = data.toString().trim();
-                console.log(`📥 Sunucudan gelen: ${message}`);
+                log(`📥 Sunucudan gelen: ${message}`);
                 
                 if (message.includes('verified')) {
-                    console.log('✅ Giriş doğrulandı - gönderim izni var');
+                    log('✅ Giriş doğrulandı - gönderim izni var');
                     resolve(true);
                 } else if (message.includes('unverified')) {
-                    console.log('⚠️  Giriş doğrulanmadı - sadece dinleme modu');
+                    log('⚠️  Giriş doğrulanmadı - sadece dinleme modu');
                     resolve(false);
                 }
             });
 
             this.socket.on('error', (err) => {
-                console.error('❌ Bağlantı hatası:', err.message);
+                logError('❌ Bağlantı hatası:', err.message);
                 reject(err);
             });
 
             this.socket.on('close', () => {
-                console.log('🔌 APRS-IS bağlantısı kapandı');
+                log('🔌 APRS-IS bağlantısı kapandı');
                 this.connected = false;
             });
 
@@ -73,7 +82,7 @@ class APRSISClient {
 
         const packetWithNewline = packet + '\r\n';
         this.socket.write(packetWithNewline);
-        console.log(`📡 Paket gönderildi: ${packet}`);
+        log(`📡 Paket gönderildi: ${packet}`);
     }
 
     /**
@@ -82,7 +91,7 @@ class APRSISClient {
     disconnect() {
         if (this.socket) {
             this.socket.end();
-            console.log('🔌 APRS-IS bağlantısı kapatıldı');
+            log('🔌 APRS-IS bağlantısı kapatıldı');
         }
     }
 }
@@ -132,27 +141,27 @@ class APRSPositionSender {
 
         // Gerekli bilgileri kontrol et
         if (!callsign) {
-            console.error('❌ CALLSIGN .env dosyasında bulunamadı!');
+            logError('❌ CALLSIGN .env dosyasında bulunamadı!');
             return false;
         }
 
         if (isNaN(latitude) || isNaN(longitude)) {
-            console.error('❌ LATITUDE veya LONGITUDE .env dosyasında hatalı!');
+            logError('❌ LATITUDE veya LONGITUDE .env dosyasında hatalı!');
             return false;
         }
 
-        console.log('🚀 APRS-IS Gerçek Gönderim Başlatılıyor...\n');
+        log('🚀 APRS-IS Gerçek Gönderim Başlatılıyor...');
 
         const packet = this.createPositionPacket(callsign, latitude, longitude, comment, symbol);
         
-        console.log('� Gönderilecek Paket Bilgileri:');
-        console.log('=====================================');
-        console.log(`📍 İstasyon: ${callsign}`);
-        console.log(`🌍 Konum: ${latitude}°, ${longitude}°`);
-        console.log(`💬 Yorum: ${comment || 'Yok'}`);
-        console.log(`🔣 Sembol: ${symbol}`);
-        console.log(`📦 Paket: ${packet}`);
-        console.log('=====================================\n');
+        log('📋 Gönderilecek Paket Bilgileri:');
+        log('=====================================');
+        log(`📍 İstasyon: ${callsign}`);
+        log(`🌍 Konum: ${latitude}°, ${longitude}°`);
+        log(`💬 Yorum: ${comment || 'Yok'}`);
+        log(`🔣 Sembol: ${symbol}`);
+        log(`📦 Paket: ${packet}`);
+        log('=====================================');
 
         // APRS-IS bağlantısı kur
         const client = new APRSISClient(server, port, callsign, passcode);
@@ -161,9 +170,9 @@ class APRSPositionSender {
             const verified = await client.connect();
             
             if (passcode === '-1') {
-                console.log('⚠️  PASSCODE ayarlanmamış (-1)');
-                console.log('ℹ️  Sadece dinleme modu - paket gönderilmeyecek');
-                console.log('ℹ️  Gerçek gönderim için geçerli passcode gerekli');
+                log('⚠️  PASSCODE ayarlanmamış (-1)');
+                log('ℹ️  Sadece dinleme modu - paket gönderilmeyecek');
+                log('ℹ️  Gerçek gönderim için geçerli passcode gerekli');
                 
                 // Simülasyon olarak bekle
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -172,26 +181,26 @@ class APRSPositionSender {
             }
 
             if (!verified) {
-                console.log('⚠️  Giriş doğrulanmadı - paket gönderilmeyecek');
+                log('⚠️  Giriş doğrulanmadı - paket gönderilmeyecek');
                 client.disconnect();
                 return false;
             }
 
             // Paketi gönder
-            console.log('📡 Paket APRS ağına gönderiliyor...');
+            log('📡 Paket APRS ağına gönderiliyor...');
             client.sendPacket(packet);
             
             // Biraz bekle sonra bağlantıyı kapat
             await new Promise(resolve => setTimeout(resolve, 2000));
             client.disconnect();
             
-            console.log('✅ Paket başarıyla APRS ağına gönderildi!');
-            console.log('🌐 https://aprs.fi adresinden kontrol edebilirsiniz.');
+            log('✅ Paket başarıyla APRS ağına gönderildi!');
+            log('🌐 https://aprs.fi adresinden kontrol edebilirsiniz.');
             
             return true;
 
         } catch (error) {
-            console.error('❌ APRS-IS gönderim hatası:', error.message);
+            logError('❌ APRS-IS gönderim hatası:', error.message);
             client.disconnect();
             return false;
         }
@@ -209,29 +218,29 @@ class APRSPositionSender {
 
         // Gerekli bilgileri kontrol et
         if (!callsign) {
-            console.error('❌ CALLSIGN .env dosyasında bulunamadı!');
+            logError('❌ CALLSIGN .env dosyasında bulunamadı!');
             return null;
         }
 
         if (isNaN(latitude) || isNaN(longitude)) {
-            console.error('❌ LATITUDE veya LONGITUDE .env dosyasında hatalı!');
-            console.log('Örnek: LATITUDE=41.01150, LONGITUDE=29.12550');
+            logError('❌ LATITUDE veya LONGITUDE .env dosyasında hatalı!');
+            log('Örnek: LATITUDE=41.01150, LONGITUDE=29.12550');
             return null;
         }
 
         const packet = this.createPositionPacket(callsign, latitude, longitude, comment, symbol);
         
-        console.log('📡 APRS Pozisyon Paketi Oluşturuldu (Simülasyon)');
-        console.log('=====================================');
-        console.log(`📍 İstasyon: ${callsign}`);
-        console.log(`🌍 Konum: ${latitude}°, ${longitude}°`);
-        console.log(`💬 Yorum: ${comment || 'Yok'}`);
-        console.log(`🔣 Sembol: ${symbol}`);
-        console.log('=====================================');
-        console.log(`📦 Paket: ${packet}`);
-        console.log('=====================================');
-        console.log('ℹ️  Bu simülasyon modu - gerçek gönderim için:');
-        console.log('   node index.js --send');
+        log('📡 APRS Pozisyon Paketi Oluşturuldu (Simülasyon)');
+        log('=====================================');
+        log(`📍 İstasyon: ${callsign}`);
+        log(`🌍 Konum: ${latitude}°, ${longitude}°`);
+        log(`💬 Yorum: ${comment || 'Yok'}`);
+        log(`🔣 Sembol: ${symbol}`);
+        log('=====================================');
+        log(`📦 Paket: ${packet}`);
+        log('=====================================');
+        log('ℹ️  Bu simülasyon modu - gerçek gönderim için:');
+        log('   node index.js --send');
         
         return packet;
     }
@@ -260,15 +269,15 @@ async function main() {
     const autoMode = args.includes('--auto');
     
     if (autoMode) {
-        console.log('🔄 APRS Otomatik Gönderim Modu\n');
+        log('🔄 APRS Otomatik Gönderim Modu');
         await startAutoSending();
         return;
     }
     
     if (shouldSend) {
-        console.log('🚀 APRS-IS Gerçek Gönderim Modu\n');
+        log('🚀 APRS-IS Gerçek Gönderim Modu');
     } else {
-        console.log('🚀 APRS Pozisyon Gönderici (Simülasyon Modu)\n');
+        log('🚀 APRS Pozisyon Gönderici (Simülasyon Modu)');
     }
     
     const sender = new APRSPositionSender();
@@ -280,30 +289,30 @@ async function main() {
         
         if (callsign && passcode === '-1') {
             const calculatedPasscode = calculatePasscode(callsign);
-            console.log(`💡 ${callsign} için hesaplanan passcode: ${calculatedPasscode}`);
-            console.log('⚠️  .env dosyasında APRS_IS_PASSCODE=-1 ayarlı');
-            console.log('ℹ️  Gerçek gönderim için doğru passcode\'u ayarlayın:\n');
-            console.log(`   APRS_IS_PASSCODE=${calculatedPasscode}\n`);
+            log(`💡 ${callsign} için hesaplanan passcode: ${calculatedPasscode}`);
+            log('⚠️  .env dosyasında APRS_IS_PASSCODE=-1 ayarlı');
+            log('ℹ️  Gerçek gönderim için doğru passcode\'u ayarlayın:');
+            log(`   APRS_IS_PASSCODE=${calculatedPasscode}`);
         }
         
         // Gerçek gönderim
         const success = await sender.sendPositionToAPRSIS();
         
         if (success) {
-            console.log('\n✨ İşlem başarıyla tamamlandı!');
+            log('✨ İşlem başarıyla tamamlandı!');
         } else {
-            console.log('\n❌ Gönderim başarısız! Ayarları kontrol edin.');
+            log('❌ Gönderim başarısız! Ayarları kontrol edin.');
         }
     } else {
         // Simülasyon modu
         const packet = sender.sendPositionFromEnv();
         
         if (packet) {
-            console.log('\n✨ Paket oluşturuldu! (Simülasyon)');
-            console.log('📡 Gerçek gönderim için: node index.js --send');
-            console.log('🔄 Otomatik gönderim için: node index.js --auto');
+            log('✨ Paket oluşturuldu! (Simülasyon)');
+            log('📡 Gerçek gönderim için: node index.js --send');
+            log('🔄 Otomatik gönderim için: node index.js --auto');
         } else {
-            console.log('\n❌ Paket oluşturulamadı! .env dosyasını kontrol edin.');
+            log('❌ Paket oluşturulamadı! .env dosyasını kontrol edin.');
         }
     }
 }
@@ -315,15 +324,15 @@ async function startAutoSending() {
     const maxCount = parseInt(process.env.AUTO_SEND_COUNT) || 10;
     
     if (!autoEnabled) {
-        console.log('⚠️  Otomatik gönderim .env dosyasında devre dışı');
-        console.log('ℹ️  Etkinleştirmek için: AUTO_SEND_ENABLED=true');
+        log('⚠️  Otomatik gönderim .env dosyasında devre dışı');
+        log('ℹ️  Etkinleştirmek için: AUTO_SEND_ENABLED=true');
         return;
     }
 
     // Minimum süre kontrolü
     if (interval < 60) {
-        console.log('❌ Minimum gönderim aralığı 60 saniye olmalı!');
-        console.log('ℹ️  Güvenlik için bu sınır konulmuştur.');
+        log('❌ Minimum gönderim aralığı 60 saniye olmalı!');
+        log('ℹ️  Güvenlik için bu sınır konulmuştur.');
         return;
     }
 
@@ -331,27 +340,27 @@ async function startAutoSending() {
     const stationType = interval >= 600 ? 'Sabit İstasyon' : interval >= 300 ? 'Yarı-Sabit' : 'Mobil/Test';
     const efficiency = interval >= 600 ? '🟢 Optimal' : interval >= 300 ? '🟡 İyi' : '🟠 Sık';
 
-    console.log('📊 Sabit İstasyon - Otomatik Gönderim Ayarları:');
-    console.log('===============================================');
-    console.log(`🏠 İstasyon Tipi: ${stationType}`);
-    console.log(`⏰ Aralık: ${interval} saniye (${Math.round(interval/60)} dakika)`);
-    console.log(`📊 Verimlilik: ${efficiency}`);
-    console.log(`🔢 Maksimum: ${maxCount} gönderim`);
-    console.log(`🌍 Konum: ${process.env.LATITUDE}°, ${process.env.LONGITUDE}°`);
-    console.log(`📡 Toplam Süre: ~${Math.round((maxCount * interval) / 60)} dakika`);
-    console.log('===============================================\n');
+    log('📊 Sabit İstasyon - Otomatik Gönderim Ayarları:');
+    log('===============================================');
+    log(`🏠 İstasyon Tipi: ${stationType}`);
+    log(`⏰ Aralık: ${interval} saniye (${Math.round(interval/60)} dakika)`);
+    log(`📊 Verimlilik: ${efficiency}`);
+    log(`🔢 Maksimum: ${maxCount} gönderim`);
+    log(`🌍 Konum: ${process.env.LATITUDE}°, ${process.env.LONGITUDE}°`);
+    log(`📡 Toplam Süre: ~${Math.round((maxCount * interval) / 60)} dakika`);
+    log('===============================================');
 
     // Sabit istasyon için uyarılar
     if (interval < 300) {
-        console.log('⚠️  DİKKAT: Sabit istasyon için 5 dakikadan kısa aralık önerilmez!');
-        console.log('💡 Önerilen aralık: 10-30 dakika (600-1800 saniye)');
-        console.log('⚠️  APRS ağını gereksiz yüklemeyin.');
-        console.log('⚠️  Devam etmek için 10 saniye bekleniyor...\n');
+        log('⚠️  DİKKAT: Sabit istasyon için 5 dakikadan kısa aralık önerilmez!');
+        log('💡 Önerilen aralık: 10-30 dakika (600-1800 saniye)');
+        log('⚠️  APRS ağını gereksiz yüklemeyin.');
+        log('⚠️  Devam etmek için 10 saniye bekleniyor...');
         await new Promise(resolve => setTimeout(resolve, 10000));
     } else if (interval >= 600) {
-        console.log('✅ Sabit istasyon için optimal aralık!');
-        console.log('💡 APRS ağı dostu gönderim aralığı.');
-        console.log('🌐 Ağ yükünü minimize ediyorsunuz.\n');
+        log('✅ Sabit istasyon için optimal aralık!');
+        log('💡 APRS ağı dostu gönderim aralığı.');
+        log('🌐 Ağ yükünü minimize ediyorsunuz.');
     }
 
     const sender = new APRSPositionSender();
@@ -359,7 +368,7 @@ async function startAutoSending() {
     let lastPacket = '';
     let startTime = new Date();
 
-    console.log('🚀 Sabit istasyon otomatik gönderimi başlıyor...\n');
+    log('🚀 Sabit istasyon otomatik gönderimi başlıyor...');
 
     const sendInterval = setInterval(async () => {
         try {
@@ -374,17 +383,17 @@ async function startAutoSending() {
             
             // Aynı paket tekrarını önle
             if (currentPacket === lastPacket) {
-                console.log(`⏭️  [${sentCount + 1}/${maxCount}] Aynı paket - atlanıyor (${new Date().toLocaleTimeString()})`);
+                log(`⏭️  [${sentCount + 1}/${maxCount}] Aynı paket - atlanıyor (${new Date().toLocaleTimeString()})`);
             } else {
-                console.log(`📡 [${sentCount + 1}/${maxCount}] Gönderiliyor... (${new Date().toLocaleTimeString()})`);
+                log(`📡 [${sentCount + 1}/${maxCount}] Gönderiliyor... (${new Date().toLocaleTimeString()})`);
                 
                 const success = await sender.sendPositionToAPRSIS();
                 
                 if (success) {
-                    console.log(`✅ [${sentCount + 1}/${maxCount}] Başarıyla gönderildi!\n`);
+                    log(`✅ [${sentCount + 1}/${maxCount}] Başarıyla gönderildi!`);
                     lastPacket = currentPacket;
                 } else {
-                    console.log(`❌ [${sentCount + 1}/${maxCount}] Gönderim başarısız!\n`);
+                    log(`❌ [${sentCount + 1}/${maxCount}] Gönderim başarısız!`);
                 }
             }
             
@@ -396,24 +405,24 @@ async function startAutoSending() {
                 const endTime = new Date();
                 const totalDuration = Math.round((endTime - startTime) / 1000 / 60);
                 
-                console.log('🏁 Sabit İstasyon Otomatik Gönderim Tamamlandı!');
-                console.log('===============================================');
-                console.log(`📊 Toplam Gönderim: ${sentCount} paket`);
-                console.log(`⏱️  Toplam Süre: ${totalDuration} dakika`);
-                console.log(`📡 Ortalama Aralık: ${Math.round(totalDuration / sentCount)} dakika/paket`);
-                console.log(`🌐 APRS.fi kontrolü: https://aprs.fi/info/a/${process.env.CALLSIGN}`);
-                console.log('===============================================');
+                log('🏁 Sabit İstasyon Otomatik Gönderim Tamamlandı!');
+                log('===============================================');
+                log(`📊 Toplam Gönderim: ${sentCount} paket`);
+                log(`⏱️  Toplam Süre: ${totalDuration} dakika`);
+                log(`📡 Ortalama Aralık: ${Math.round(totalDuration / sentCount)} dakika/paket`);
+                log(`🌐 APRS.fi kontrolü: https://aprs.fi/info/a/${process.env.CALLSIGN}`);
+                log('===============================================');
                 process.exit(0);
             } else {
                 const remaining = maxCount - sentCount;
                 const nextTime = new Date(Date.now() + interval * 1000).toLocaleTimeString();
                 const totalRemaining = Math.round((remaining * interval) / 60);
-                console.log(`⏳ Sonraki gönderim: ${nextTime}`);
-                console.log(`📊 Kalan: ${remaining} adet (~${totalRemaining} dakika)`);
+                log(`⏳ Sonraki gönderim: ${nextTime}`);
+                log(`📊 Kalan: ${remaining} adet (~${totalRemaining} dakika)`);
             }
             
         } catch (error) {
-            console.error('❌ Otomatik gönderim hatası:', error.message);
+            logError('❌ Otomatik gönderim hatası:', error.message);
         }
     }, interval * 1000);
 
@@ -423,14 +432,14 @@ async function startAutoSending() {
         const endTime = new Date();
         const totalDuration = Math.round((endTime - startTime) / 1000 / 60);
         
-        console.log('\n🛑 Sabit İstasyon Gönderimi Durduruldu');
-        console.log('=====================================');
-        console.log(`📊 Gönderilen: ${sentCount}/${maxCount} paket`);
-        console.log(`⏱️  Çalışma Süresi: ${totalDuration} dakika`);
+        log('🛑 Sabit İstasyon Gönderimi Durduruldu');
+        log('=====================================');
+        log(`📊 Gönderilen: ${sentCount}/${maxCount} paket`);
+        log(`⏱️  Çalışma Süresi: ${totalDuration} dakika`);
         if (sentCount > 0) {
-            console.log(`📡 Ortalama Aralık: ${Math.round(totalDuration / sentCount)} dakika/paket`);
+            log(`📡 Ortalama Aralık: ${Math.round(totalDuration / sentCount)} dakika/paket`);
         }
-        console.log('=====================================');
+        log('=====================================');
         process.exit(0);
     });
 }
@@ -444,5 +453,5 @@ module.exports = {
 
 // Script doğrudan çalıştırılıyorsa ana fonksiyonu çalıştır
 if (require.main === module) {
-    main().catch(console.error);
+    main().catch(logError);
 }

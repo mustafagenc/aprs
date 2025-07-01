@@ -74,6 +74,12 @@ io.on('connection', (socket) => {
         version: packageInfo.version || '1.0.0',
         appName: packageInfo.name || 'APRS-FI'
     });
+    
+    // Eğer otomatik process çalışıyorsa bunu bildir
+    if (activeProcesses.auto) {
+        socket.emit('log', { type: 'info', message: '🤖 Otomatik gönderim arka planda çalışıyor...' });
+        socket.emit('log', { type: 'info', message: '📊 AUTO_START_ON_DEPLOY ile başlatıldı' });
+    }
 
     // Otomatik gönderim başlat
     socket.on('start-auto', () => {
@@ -100,15 +106,13 @@ io.on('connection', (socket) => {
         activeProcesses.auto.stdout.on('data', (data) => {
             const message = data.toString().trim();
             if (message) {
-                socket.emit('log', { type: 'info', message: message });
-                io.emit('log', { type: 'info', message: message }); // Tüm client'lara gönder
+                io.emit('log', { type: 'info', message: message }); // Sadece tüm client'lara gönder
             }
         });
 
         activeProcesses.auto.stderr.on('data', (data) => {
             const message = data.toString().trim();
             if (message) {
-                socket.emit('log', { type: 'error', message: `❌ ${message}` });
                 io.emit('log', { type: 'error', message: `❌ ${message}` });
             }
         });
@@ -116,7 +120,6 @@ io.on('connection', (socket) => {
         activeProcesses.auto.on('close', (code) => {
             activeProcesses.auto = null;
             const message = `🏁 Otomatik gönderim tamamlandı (Exit code: ${code})`;
-            socket.emit('log', { type: 'info', message: message });
             io.emit('log', { type: 'info', message: message });
             io.emit('status', { auto: false, send: false });
         });
@@ -149,7 +152,6 @@ io.on('connection', (socket) => {
         activeProcesses.send.stdout.on('data', (data) => {
             const message = data.toString().trim();
             if (message) {
-                socket.emit('log', { type: 'info', message: message });
                 io.emit('log', { type: 'info', message: message });
             }
         });
@@ -157,7 +159,6 @@ io.on('connection', (socket) => {
         activeProcesses.send.stderr.on('data', (data) => {
             const message = data.toString().trim();
             if (message) {
-                socket.emit('log', { type: 'error', message: `❌ ${message}` });
                 io.emit('log', { type: 'error', message: `❌ ${message}` });
             }
         });
@@ -165,7 +166,6 @@ io.on('connection', (socket) => {
         activeProcesses.send.on('close', (code) => {
             activeProcesses.send = null;
             const message = `✅ Tek gönderim tamamlandı (Exit code: ${code})`;
-            socket.emit('log', { type: 'info', message: message });
             io.emit('log', { type: 'info', message: message });
             io.emit('status', { auto: !!activeProcesses.auto, send: false });
         });
@@ -177,7 +177,6 @@ io.on('connection', (socket) => {
     socket.on('stop-auto', () => {
         if (activeProcesses.auto) {
             activeProcesses.auto.kill('SIGINT');
-            socket.emit('log', { type: 'warning', message: '🛑 Otomatik gönderim durduruldu' });
             io.emit('log', { type: 'warning', message: '🛑 Otomatik gönderim durduruldu' });
         }
     });
