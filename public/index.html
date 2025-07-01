@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📡 APRS Position Sender - Web Interface</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 5px solid #667eea;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+            transition: all 0.3s;
+        }
+
+        .indicator.active {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .config-card {
+            background: white;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .config-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .config-value {
+            font-size: 1.2em;
+            color: #333;
+            font-family: 'Courier New', monospace;
+            background: #f8f9fa;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 150px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .log-container {
+            background: #1e1e1e;
+            color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            border: 2px solid #333;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-entry.info {
+            color: #00ff00;
+        }
+
+        .log-entry.warning {
+            color: #ffaa00;
+        }
+
+        .log-entry.error {
+            color: #ff4444;
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .log-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+        }
+
+        .demo-alert {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3); }
+            to { box-shadow: 0 4px 25px rgba(255, 107, 107, 0.6); }
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📡 APRS Position Sender</h1>
+        <p style="text-align: center; color: #666; margin-bottom: 30px;">Web arayüzü ile APRS paketlerinizi kontrol edin</p>
+        
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="indicator" id="autoIndicator"></div>
+                <span>Otomatik Gönderim</span>
+            </div>
+            <div class="status-indicator">
+                <div class="indicator" id="sendIndicator"></div>
+                <span>Tek Gönderim</span>
+            </div>
+            <div id="timestamp" style="color: #666; font-size: 0.9em;"></div>
+        </div>
+
+        <!-- Demo Mode Uyarısı -->
+        <div class="demo-alert" id="demoAlert" style="display: none;">
+            🚫 <span id="demoMessage">Bu demo sürümüdür. APRS gönderimi devre dışıdır.</span>
+        </div>
+
+        <div class="config-grid" id="configGrid">
+            <!-- Konfigürasyon kartları JavaScript ile doldurulacak -->
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" id="startAutoBtn">🚀 Otomatik Gönderim Başlat</button>
+            <button class="btn btn-success" id="sendOnceBtn">📡 Tek Gönderim</button>
+            <button class="btn btn-danger" id="stopAutoBtn" disabled>🛑 Durdur</button>
+            <button class="btn btn-secondary" id="clearLogsBtn">🗑️ Log'ları Temizle</button>
+        </div>
+
+        <div class="log-header">
+            <div class="log-title">📋 Canlı Log Görüntüleyici</div>
+            <div style="color: #666; font-size: 0.9em;">Real-time APRS işlem logları</div>
+        </div>
+        
+        <div class="log-container" id="logContainer">
+            <div class="log-entry info">🌐 Web arayüzü başlatıldı...</div>
+            <div class="log-entry info">⏳ APRS sistemi bağlantısı bekleniyor...</div>
+        </div>
+
+        <div class="footer">
+            <p>Geliştiren: <a href="https://mustafagenc.info" target="_blank">Mustafa Genç</a> | 
+               Çağrı İşareti: <strong id="footerCallsign">TB2ABI</strong></p>
+            <p style="margin-top: 10px; font-size: 0.9em;">APRS Position Sender v1.0 - Node.js & Socket.IO</p>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let config = {};
+
+        // DOM elementleri
+        const autoIndicator = document.getElementById('autoIndicator');
+        const sendIndicator = document.getElementById('sendIndicator');
+        const startAutoBtn = document.getElementById('startAutoBtn');
+        const sendOnceBtn = document.getElementById('sendOnceBtn');
+        const stopAutoBtn = document.getElementById('stopAutoBtn');
+        const clearLogsBtn = document.getElementById('clearLogsBtn');
+        const logContainer = document.getElementById('logContainer');
+        const configGrid = document.getElementById('configGrid');
+        const timestamp = document.getElementById('timestamp');
+        const footerCallsign = document.getElementById('footerCallsign');
+
+        // Zaman damgası güncelle
+        function updateTimestamp() {
+            timestamp.textContent = new Date().toLocaleString('tr-TR');
+        }
+        setInterval(updateTimestamp, 1000);
+        updateTimestamp();
+
+        // Konfigürasyon kartlarını oluştur
+        function createConfigCards(config) {
+            const cards = [
+                { label: '📡 Çağrı İşareti', value: config.callsign },
+                { label: '🌍 Enlem', value: config.latitude + '°' },
+                { label: '🌍 Boylam', value: config.longitude + '°' },
+                { label: '💬 Yorum', value: config.comment },
+                { label: '🔣 Sembol', value: config.symbol },
+                { label: '⏰ Aralık', value: config.interval + ' saniye' },
+                { label: '🔢 Maksimum', value: config.count + ' paket' },
+                { label: '✅ Otomatik', value: config.autoEnabled ? 'Aktif' : 'Devre Dışı' }
+            ];
+
+            configGrid.innerHTML = cards.map(card => `
+                <div class="config-card">
+                    <div class="config-label">${card.label}</div>
+                    <div class="config-value">${card.value}</div>
+                </div>
+            `).join('');
+
+            footerCallsign.textContent = config.callsign;
+        }
+
+        // Log ekle
+        function addLog(type, message) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString('tr-TR');
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Max 1000 log tut
+            while (logContainer.children.length > 1000) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        // Durum güncelle
+        function updateStatus(status) {
+            autoIndicator.classList.toggle('active', status.auto);
+            sendIndicator.classList.toggle('active', status.send);
+            
+            // Demo mode'da butonları her zaman devre dışı bırak
+            if (config && config.demoMode) {
+                startAutoBtn.disabled = true;
+                sendOnceBtn.disabled = true;
+                stopAutoBtn.disabled = true;
+            } else {
+                startAutoBtn.disabled = status.auto;
+                stopAutoBtn.disabled = !status.auto;
+                sendOnceBtn.disabled = status.send;
+            }
+        }
+
+        // Socket olayları
+        socket.on('config', (data) => {
+            config = data;
+            createConfigCards(config);
+            addLog('info', `📋 Konfigürasyon yüklendi: ${data.callsign}`);
+            
+            // Demo mode kontrolü
+            if (data.demoMode) {
+                document.getElementById('demoAlert').style.display = 'block';
+                document.getElementById('demoMessage').textContent = data.demoMessage;
+                
+                // Butonları devre dışı bırak
+                startAutoBtn.disabled = true;
+                sendOnceBtn.disabled = true;
+                
+                addLog('warning', `🚫 Demo Mode: ${data.demoMessage}`);
+            } else {
+                document.getElementById('demoAlert').style.display = 'none';
+            }
+        });
+
+        socket.on('log', (data) => {
+            addLog(data.type, data.message);
+        });
+
+        socket.on('status', (data) => {
+            updateStatus(data);
+        });
+
+        socket.on('clear-logs', () => {
+            logContainer.innerHTML = '<div class="log-entry info">🗑️ Log\'lar temizlendi</div>';
+        });
+
+        // Buton olayları
+        startAutoBtn.addEventListener('click', () => {
+            socket.emit('start-auto');
+            addLog('info', '🚀 Otomatik gönderim talebi gönderildi...');
+        });
+
+        sendOnceBtn.addEventListener('click', () => {
+            socket.emit('send-once');
+            addLog('info', '📡 Tek gönderim talebi gönderildi...');
+        });
+
+        stopAutoBtn.addEventListener('click', () => {
+            socket.emit('stop-auto');
+            addLog('warning', '🛑 Durdurma talebi gönderildi...');
+        });
+
+        clearLogsBtn.addEventListener('click', () => {
+            socket.emit('clear-logs');
+        });
+
+        // Bağlantı durumu
+        socket.on('connect', () => {
+            addLog('info', '✅ Web arayüzü APRS sistemine bağlandı');
+        });
+
+        socket.on('disconnect', () => {
+            addLog('error', '❌ Web arayüzü bağlantısı kesildi');
+        });
+
+        // Sayfa kapatılırken
+        window.addEventListener('beforeunload', () => {
+            socket.disconnect();
+        });
+    </script>
+</body>
+</html>

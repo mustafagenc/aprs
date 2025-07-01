@@ -94,7 +94,17 @@ AUTO_SEND_COUNT=5
 
 ## 🎯 Kullanım
 
-### Simülasyon (Test)
+### 🌐 Web Arayüzü (Yeni!)
+```bash
+npm run web
+# Tarayıcıda: http://localhost:3000
+```
+- ✅ **Real-time log görüntüleme**
+- ✅ **Buton ile kontrol** (başlat/durdur)
+- ✅ **Konfigürasyon görüntüleme**
+- ✅ **Responsive tasarım**
+
+### 💻 Komut Satırı
 ```bash
 npm start
 # veya
