@@ -11,6 +11,60 @@ Node.js ile APRS-IS üzerinden konum gönderme uygulaması.
 - ✅ Passcode otomatik hesaplama
 - ✅ Rate limiting koruması
 
+<details>
+<summary><strong>🚂 Railway Deployment (Tıklayın)</strong></summary>
+
+Bu projeyi Railway üzerinde ücretsiz olarak 7/24 çalıştırabilirsiniz:
+
+### 📱 NPM Run Auto
+![NPM Run Auto](resources/railway-screenshot-1.png)
+
+### 📊 Railway Deployment Logları
+![Railway Logs](resources/railway-screenshot-2.png)
+
+### 🚀 Hızlı Kurulum
+```bash
+# 1. Railway CLI kur
+npm install -g @railway/cli
+
+# 2. Login ol
+railway login
+
+# 3. Proje başlat
+railway init
+
+# 4. Environment variables ekle
+railway add CALLSIGN=TB2ABI
+railway add LATITUDE=41.011805
+railway add LONGITUDE=29.125039
+railway add APRS_IS_PASSCODE=22440
+railway add AUTO_SEND_ENABLED=true
+railway add AUTO_SEND_INTERVAL=600
+railway add AUTO_SEND_COUNT=10
+
+# 5. Deploy et
+railway up
+```
+
+### ✅ Railway Kurulum
+- **Ücretsiz**: 750 saat/ay + $5 kredi
+- **TCP Socket**: APRS-IS tam destek ✅
+- **Always-on**: 7/24 çalışır, uyku modu yok
+- **Git entegrasyonu**: Otomatik deployment
+- **Environment variables**: Tam destek
+
+### 🔧 Alternatif Deployment Seçenekleri
+| Platform | Ücretsiz Plan | TCP Desteği | Always-On | Önerilen |
+|----------|---------------|-------------|-----------|----------|
+| 🚂 Railway | 750 saat/ay | ✅ | ✅ | ⭐⭐⭐⭐⭐ |
+| 🎨 Render | 750 saat/ay | ✅ | ✅ | ⭐⭐⭐⭐ |
+| 🟣 Heroku | 1000 saat/ay | ⚠️ | ❌ Sleep | ⭐⭐⭐ |
+| 🐋 Fly.io | 3 app limit | ✅ | ✅ | ⭐⭐⭐⭐ |
+
+**5 dakikada Railway'de çalışır durumda!** 🎉
+
+</details>
+
 ## 📋 Kurulum
 
 ```bash
