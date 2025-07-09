@@ -8,21 +8,6 @@
     <!-- Favicon ve Web App Manifest -->
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon/                //                { label: '🔣 Sembol', value: config.symbol }               { label: '🔣 Sembol', value: config.symbol }Kartları tek satırda organize et
-            const allCards = [
-                { label: '📡 Çağrı İşareti', value: config.callsign },
-                { label: '🌍 Enlem', value: config.latitude + '°' },
-                { label: '🌍 Boylam', value: config.longitude + '°' },
-                { label: '🔣 Sembol', value: config.symbol },
-                { label: '⏰ Aralık', value: config.interval + ' sn' },
-                { label: '🔢 Maksimum', value: config.count + ' paket' },
-                { label: '💬 Yorum', value: config.comment, isComment: true }
-            ];opRowCards = [
-                { label: '📡 Çağrı İşareti', value: config.callsign },
-                { label: '🌍 Enlem', value: config.latitude + '°' },
-                { label: '🌍 Boylam', value: config.longitude + '°' },
-                { label: '🔣 Sembol', value: config.symbol } 
-            ];n-16x16.png">
     <link rel="manifest" href="/favicon/site.webmanifest">
     <link rel="shortcut icon" href="/favicon/favicon.ico">
     
@@ -293,6 +278,63 @@
             to { box-shadow: 0 4px 25px rgba(239, 68, 68, 0.6); }
         }
 
+        /* Tam ekran log modal */
+        .fullscreen-log-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: none;
+        }
+
+        .fullscreen-log-modal.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .fullscreen-log-header {
+            padding: 1rem 2rem;
+            background: rgba(31, 41, 55, 0.9);
+            border-bottom: 1px solid rgba(75, 85, 99, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .fullscreen-log-content {
+            flex: 1;
+            padding: 1rem 2rem;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #10b981;
+            background: rgba(10, 10, 10, 0.98);
+        }
+
+        .fullscreen-log-content::-webkit-scrollbar {
+            width: 12px;
+        }
+        
+        .fullscreen-log-content::-webkit-scrollbar-track {
+            background: rgba(20, 20, 20, 0.9);
+            border-radius: 6px;
+        }
+        
+        .fullscreen-log-content::-webkit-scrollbar-thumb {
+            background: rgba(75, 85, 99, 1);
+            border-radius: 6px;
+            border: 2px solid rgba(20, 20, 20, 0.9);
+        }
+        
+        .fullscreen-log-content::-webkit-scrollbar-thumb:hover {
+            background: rgba(107, 114, 128, 1);
+        }
+
     </style>
 </head>
 <body class="min-h-screen space-bg p-4 font-sans">
@@ -364,11 +406,34 @@
         <div class="bg-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-lg shadow-2xl overflow-hidden">
             <div class="bg-gray-800/60 backdrop-blur-sm p-4 border-b border-gray-600/40">
                 <div class="flex justify-between items-center">
-                    <h3 class="text-lg font-bold text-gray-100">📋 Canlı Log Görüntüleyici</h3>
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-lg font-bold text-gray-100">📋 Canlı Log Görüntüleyici</h3>
+                        <button id="fullscreenLogBtn" class="bg-gray-700/50 hover:bg-gray-600/60 text-gray-300 hover:text-white px-3 py-1.5 rounded-md transition-all duration-200 flex items-center gap-2 text-sm font-medium group">
+                            <span class="text-sm group-hover:scale-110 transition-transform duration-200">🔍</span>
+                            <span>Tam Ekran</span>
+                        </button>
+                    </div>
                     <span class="text-xs text-gray-400">Real-time APRS işlem logları</span>
                 </div>
             </div>
             <div id="logContainer" class="log-container text-green-400 font-mono text-sm p-4 h-80 border border-gray-700/30 rounded">
+                <div class="text-blue-400">🚀 APRS Web Arayüzü hazır - bağlantı bekleniyor...</div>
+            </div>
+        </div>
+
+        <!-- Tam Ekran Log Modal -->
+        <div id="fullscreenLogModal" class="fullscreen-log-modal">
+            <div class="fullscreen-log-header">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-bold text-white">📋 Canlı Log Görüntüleyici - Tam Ekran</h2>
+                    <span class="text-sm text-gray-400">ESC tuşuna basarak çıkabilirsiniz</span>
+                </div>
+                <button id="closeFullscreenBtn" class="bg-red-600/20 hover:bg-red-600/40 text-red-400 hover:text-red-300 px-4 py-2 rounded-md transition-all duration-200 flex items-center gap-2 font-medium group">
+                    <span class="text-lg group-hover:scale-110 transition-transform duration-200">✕</span>
+                    <span>Kapat</span>
+                </button>
+            </div>
+            <div id="fullscreenLogContent" class="fullscreen-log-content">
                 <div class="text-blue-400">🚀 APRS Web Arayüzü hazır - bağlantı bekleniyor...</div>
             </div>
         </div>
@@ -424,6 +489,12 @@
         const sendIndicator = document.getElementById('sendIndicator');
         const appName = document.getElementById('appName');
         const appVersion = document.getElementById('appVersion');
+        
+        // Tam ekran log elementleri
+        const fullscreenLogBtn = document.getElementById('fullscreenLogBtn');
+        const fullscreenLogModal = document.getElementById('fullscreenLogModal');
+        const closeFullscreenBtn = document.getElementById('closeFullscreenBtn');
+        const fullscreenLogContent = document.getElementById('fullscreenLogContent');
 
         let config = {};
 
@@ -506,7 +577,7 @@
             
             const bottomRowCards = [
                 { label: '⏰ Aralık', value: config.interval + ' sn' },
-                { label: '🔢 Maksimum', value: config.count + ' paket' },
+                { label: '🔀 Path', value: config.path || 'APRS' },
                 { label: '💬 Yorum', value: config.comment, span: 'col-span-2', isComment: true } 
             ];
 
@@ -536,12 +607,54 @@
             logEntry.className = `mb-2 ${colorClass}`;
             logEntry.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${message}`;
             
+            // Normal log container'a ekle
             logContainer.appendChild(logEntry);
             logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Tam ekran log'a da ekle
+            const fullscreenLogEntry = logEntry.cloneNode(true);
+            fullscreenLogContent.appendChild(fullscreenLogEntry);
+            fullscreenLogContent.scrollTop = fullscreenLogContent.scrollHeight;
             
             // Scrollbar'ı zorla göster
             logContainer.style.overflowY = 'scroll';
         }
+
+        // Tam ekran log açma/kapama fonksiyonları
+        function openFullscreenLog() {
+            // Mevcut logları tam ekran modal'a kopyala
+            fullscreenLogContent.innerHTML = logContainer.innerHTML;
+            fullscreenLogModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            
+            // Scroll'u en alta kaydır
+            setTimeout(() => {
+                fullscreenLogContent.scrollTop = fullscreenLogContent.scrollHeight;
+            }, 100);
+        }
+
+        function closeFullscreenLog() {
+            fullscreenLogModal.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+
+        // Tam ekran log event listener'ları
+        fullscreenLogBtn.addEventListener('click', openFullscreenLog);
+        closeFullscreenBtn.addEventListener('click', closeFullscreenLog);
+
+        // ESC tuşu ile kapatma
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && fullscreenLogModal.classList.contains('active')) {
+                closeFullscreenLog();
+            }
+        });
+
+        // Modal dışına tıklayınca kapatma
+        fullscreenLogModal.addEventListener('click', (event) => {
+            if (event.target === fullscreenLogModal) {
+                closeFullscreenLog();
+            }
+        });
 
         // Durum güncelle
         function updateStatus(status) {
@@ -603,7 +716,9 @@
         });
 
         socket.on('clear-logs', () => {
-            logContainer.innerHTML = '<div class="text-blue-400">🗑️ Log\'lar temizlendi</div>';
+            const clearMessage = '<div class="text-blue-400">🗑️ Log\'lar temizlendi</div>';
+            logContainer.innerHTML = clearMessage;
+            fullscreenLogContent.innerHTML = clearMessage;
         });
 
         // Buton olayları

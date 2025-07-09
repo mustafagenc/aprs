@@ -109,9 +109,10 @@ class APRSPositionSender {
 	 * @param {number} lng - Boylam
 	 * @param {string} comment - Yorum (opsiyonel)
 	 * @param {string} symbol - APRS sembolü (opsiyonel)
+	 * @param {string} path - APRS path (opsiyonel)
 	 * @returns {string} - APRS paketi
 	 */
-	createPositionPacket(callsign, lat, lng, comment = '', symbol = '/>') {
+	createPositionPacket(callsign, lat, lng, comment = '', symbol = '/>', path = 'APRS') {
 		// Enlem ve boylamı APRS formatına çevir
 		const latDeg = Math.floor(Math.abs(lat));
 		const latMin = (Math.abs(lat) - latDeg) * 60;
@@ -129,7 +130,7 @@ class APRSPositionSender {
 			.padStart(5, '0')}${lngDir}`;
 
 		// APRS pozisyon paketi formatı
-		const packet = `${callsign}>APRS:=${latStr}${symbol[0]}${lngStr}${symbol[1]}${comment}`;
+		const packet = `${callsign}>${path}:=${latStr}${symbol[0]}${lngStr}${symbol[1]}${comment}`;
 
 		return packet;
 	}
@@ -143,6 +144,7 @@ class APRSPositionSender {
 		const longitude = parseFloat(process.env.LONGITUDE);
 		const comment = process.env.COMMENT || '';
 		const symbol = process.env.SYMBOL || '/>';
+		const path = process.env.APRS_PATH || 'APRS';
 		const server = process.env.APRS_IS_SERVER || 'euro.aprs2.net';
 		const port = parseInt(process.env.APRS_IS_PORT) || 14580;
 		const passcode = process.env.APRS_IS_PASSCODE || '-1';
@@ -165,7 +167,8 @@ class APRSPositionSender {
 			latitude,
 			longitude,
 			comment,
-			symbol
+			symbol,
+			path
 		);
 
 		log('\n📋 Gönderilecek Paket Bilgileri:\n');
@@ -174,7 +177,8 @@ class APRSPositionSender {
 		log(`🌍 Konum: ${latitude}°, ${longitude}°\n`);
 		log(`💬 Yorum: ${comment || 'Yok'}\n`);
 		log(`🔣 Sembol: ${symbol}\n`);
-		log(`📦 Paket: ${packet}\n`);
+		log(`�️  Path: ${path}\n`);
+		log(`�📦 Paket: ${packet}\n`);
 		log('=====================================\n');
 
 		// APRS-IS bağlantısı kur
@@ -228,6 +232,7 @@ class APRSPositionSender {
 		const longitude = parseFloat(process.env.LONGITUDE);
 		const comment = process.env.COMMENT || '';
 		const symbol = process.env.SYMBOL || '/>';
+		const path = process.env.APRS_PATH || 'APRS';
 
 		// Gerekli bilgileri kontrol et
 		if (!callsign) {
@@ -246,7 +251,8 @@ class APRSPositionSender {
 			latitude,
 			longitude,
 			comment,
-			symbol
+			symbol,
+			path
 		);
 
 		log('📡 APRS Pozisyon Paketi Oluşturuldu (Simülasyon)');
@@ -255,6 +261,7 @@ class APRSPositionSender {
 		log(`🌍 Konum: ${latitude}°, ${longitude}°`);
 		log(`💬 Yorum: ${comment || 'Yok'}`);
 		log(`🔣 Sembol: ${symbol}`);
+		log(`🛤️  Path: ${path}`);
 		log('=====================================');
 		log(`📦 Paket: ${packet}`);
 		log('=====================================');
@@ -268,11 +275,12 @@ class APRSPositionSender {
 	 * APRS durum paketi oluştur
 	 * @param {string} callsign - Çağrı işareti
 	 * @param {string} status - Durum mesajı
+	 * @param {string} path - APRS path (opsiyonel)
 	 * @returns {string} - APRS status paketi
 	 */
-	createStatusPacket(callsign, status) {
-		// APRS status paketi formatı: CALLSIGN>APRS:>STATUS_MESSAGE
-		const packet = `${callsign}>APRS:>${status}`;
+	createStatusPacket(callsign, status, path = 'APRS') {
+		// APRS status paketi formatı: CALLSIGN>PATH:>STATUS_MESSAGE
+		const packet = `${callsign}>${path}:>${status}`;
 		return packet;
 	}
 
@@ -282,6 +290,7 @@ class APRSPositionSender {
 	async sendStatusToAPRSIS() {
 		const callsign = process.env.CALLSIGN;
 		const status = process.env.APRS_STATUS || '';
+		const path = process.env.APRS_PATH || 'APRS';
 		const server = process.env.APRS_IS_SERVER || 'euro.aprs2.net';
 		const port = parseInt(process.env.APRS_IS_PORT) || 14580;
 		const passcode = process.env.APRS_IS_PASSCODE || '-1';
@@ -302,12 +311,13 @@ class APRSPositionSender {
 
 		log('🚀 APRS-IS Durum Gönderimi Başlatılıyor...');
 
-		const packet = this.createStatusPacket(callsign, status);
+		const packet = this.createStatusPacket(callsign, status, path);
 
 		log('📋 Gönderilecek Durum Paketi Bilgileri:');
 		log('=====================================');
 		log(`📍 İstasyon: ${callsign}`);
 		log(`📢 Durum: ${status}`);
+		log(`🛤️  Path: ${path}`);
 		log(`📦 Paket: ${packet}`);
 		log('=====================================');
 
@@ -359,6 +369,7 @@ class APRSPositionSender {
 	sendStatusFromEnv() {
 		const callsign = process.env.CALLSIGN;
 		const status = process.env.APRS_STATUS || '';
+		const path = process.env.APRS_PATH || 'APRS';
 
 		// Gerekli bilgileri kontrol et
 		if (!callsign) {
@@ -374,9 +385,13 @@ class APRSPositionSender {
 			return null;
 		}
 
-		const packet = this.createStatusPacket(callsign, status);
+		const packet = this.createStatusPacket(callsign, status, path);
 
 		log('📢 APRS Durum Paketi Oluşturuldu (Simülasyon)');
+		log('=====================================');
+		log(`📍 İstasyon: ${callsign}`);
+		log(`📢 Durum: ${status}`);
+		log(`🛤️  Path: ${path}`);
 		log('=====================================');
 		log(`📍 İstasyon: ${callsign}`);
 		log(`📢 Durum: ${status}`);
@@ -419,6 +434,7 @@ class APRSPositionSender {
 	 */
 	async sendStatusToAPRSIS(customStatus = null, includeSystemInfo = true) {
 		const callsign = process.env.CALLSIGN;
+		const path = process.env.APRS_PATH || 'APRS';
 		const server = process.env.APRS_IS_SERVER || 'euro.aprs2.net';
 		const port = parseInt(process.env.APRS_IS_PORT) || 14580;
 		const passcode = process.env.APRS_IS_PASSCODE || '-1';
@@ -456,12 +472,13 @@ class APRSPositionSender {
 		const minute = now.getUTCMinutes().toString().padStart(2, '0');
 		const timestamp = `${day}${hour}${minute}z`;
 
-		const packet = this.createStatusPacket(callsign, statusMessage);
+		const packet = this.createStatusPacket(callsign, statusMessage, path);
 
 		log('📢 Gönderilecek Durum Bilgisi:');
 		log('=====================================');
 		log(`📍 İstasyon: ${callsign}`);
 		log(`📢 Durum: ${statusMessage}`);
+		log(`🛤️  Path: ${path}`);
 		log(`⏰ Zaman: ${timestamp} UTC`);
 		log(`📦 Paket: ${packet}`);
 		log('=====================================');
@@ -724,13 +741,15 @@ async function startAutoSending() {
 			const longitude = parseFloat(process.env.LONGITUDE);
 			const comment = process.env.COMMENT || '';
 			const symbol = process.env.SYMBOL || '/>';
+			const path = process.env.APRS_PATH || 'APRS';
 
 			const currentPacket = sender.createPositionPacket(
 				callsign,
 				latitude,
 				longitude,
 				comment,
-				symbol
+				symbol,
+				path
 			);
 
 			// Aynı paket tekrarını önle
