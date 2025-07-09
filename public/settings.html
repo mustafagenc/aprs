@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APRS Ayarları</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                    },
+                    keyframes: {
+                        glow: {
+                            from: { boxShadow: '0 4px 15px rgba(34, 197, 94, 0.3)' },
+                            to: { boxShadow: '0 4px 25px rgba(34, 197, 94, 0.6)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Dark theme ayarlar */
+        body {
+            background: linear-gradient(135deg, #0c0c1e 0%, #1a1a3e 25%, #2d1b69 50%, #5b2c87 75%, #8b5a9f 100%);
+            min-height: 100vh;
+            user-select: none;
+        }
+        
+        /* Form elementleri için metin seçimi */
+        input, textarea, select {
+            user-select: text !important;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(20, 20, 20, 0.8);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(75, 85, 99, 1);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(107, 114, 128, 1);
+        }
+    </style>
+</head>
+<body class="font-sans text-white">
+    <div class="container mx-auto p-6 max-w-4xl">
+        
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+                ⚙️ APRS Ayarları
+            </h1>
+            <p class="text-gray-300">Uygulama ayarlarınızı buradan yapılandırabilirsiniz</p>
+        </div>
+
+        <!-- Ayarlar Formu -->
+        <form id="settingsForm" class="space-y-8">
+            
+            <!-- Temel Bilgiler -->
+            <div class="bg-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    📡 Temel Bilgiler
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="callsign" class="block text-sm font-medium text-gray-300 mb-2">
+                            Çağrı İşareti
+                        </label>
+                        <input type="text" id="callsign" name="callsign" 
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="TB2ABI">
+                    </div>
+                    <div>
+                        <label for="symbol" class="block text-sm font-medium text-gray-300 mb-2">
+                            APRS Sembolü
+                        </label>
+                        <input type="text" id="symbol" name="symbol" maxlength="2"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="/-">
+                        <p class="text-gray-400 text-xs mt-1">APRS sembol kodu (örn: /- araba, /p kişi, \\ bina)</p>
+                    </div>
+                    <div>
+                        <label for="latitude" class="block text-sm font-medium text-gray-300 mb-2">
+                            Enlem (Latitude)
+                        </label>
+                        <input type="number" id="latitude" name="latitude" step="0.000001"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="41.011805">
+                    </div>
+                    <div>
+                        <label for="longitude" class="block text-sm font-medium text-gray-300 mb-2">
+                            Boylam (Longitude)
+                        </label>
+                        <input type="number" id="longitude" name="longitude" step="0.000001"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="29.125039">
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label for="comment" class="block text-sm font-medium text-gray-300 mb-2">
+                        Yorum
+                    </label>
+                    <textarea id="comment" name="comment" rows="3"
+                              class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                              placeholder="Mustafa Genç&#10;https://mustafagenc.info"></textarea>
+                </div>
+            </div>
+
+            <!-- APRS-IS Ayarları -->
+            <div class="bg-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    🌐 APRS-IS Sunucu Ayarları
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="aprs_is_server" class="block text-sm font-medium text-gray-300 mb-2">
+                            APRS-IS Sunucusu
+                        </label>
+                        <input type="text" id="aprs_is_server" name="aprs_is_server"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="euro.aprs2.net">
+                    </div>
+                    <div>
+                        <label for="aprs_is_port" class="block text-sm font-medium text-gray-300 mb-2">
+                            Port
+                        </label>
+                        <input type="number" id="aprs_is_port" name="aprs_is_port"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="14580">
+                    </div>
+                    <div>
+                        <label for="aprs_is_passcode" class="block text-sm font-medium text-gray-300 mb-2">
+                            APRS-IS Passcode
+                        </label>
+                        <input type="password" id="aprs_is_passcode" name="aprs_is_passcode"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="••••••">
+                    </div>
+                    <div>
+                        <label for="aprs_path" class="block text-sm font-medium text-gray-300 mb-2">
+                            APRS Path
+                        </label>
+                        <input type="text" id="aprs_path" name="aprs_path"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="WIDE1-1,WIDE2-1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Otomatik Gönderim Ayarları -->
+            <div class="bg-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    🤖 Otomatik Gönderim Ayarları
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="auto_send_interval" class="block text-sm font-medium text-gray-300 mb-2">
+                            Gönderim Aralığı (saniye)
+                        </label>
+                        <input type="number" id="auto_send_interval" name="auto_send_interval" min="60"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="600">
+                    </div>
+                    <div>
+                        <label for="auto_send_count" class="block text-sm font-medium text-gray-300 mb-2">
+                            Maksimum Gönderim Sayısı
+                        </label>
+                        <input type="number" id="auto_send_count" name="auto_send_count" min="1"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="10">
+                    </div>
+                    <div>
+                        <label for="web_port" class="block text-sm font-medium text-gray-300 mb-2">
+                            Web Server Portu
+                        </label>
+                        <input type="number" id="web_port" name="web_port" min="1000" max="65535"
+                               class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                               placeholder="3000">
+                    </div>
+                </div>
+                
+                <!-- Switch Ayarları -->
+                <div class="mt-6 space-y-4">
+                    <div class="flex items-center justify-between p-4 bg-gray-800/30 rounded-lg">
+                        <div>
+                            <h3 class="text-white font-medium">Otomatik Gönderim Aktif</h3>
+                            <p class="text-gray-400 text-sm">Deploy sonrası otomatik gönderim başlat</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="auto_send_enabled" name="auto_send_enabled" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-gray-800/30 rounded-lg">
+                        <div>
+                            <h3 class="text-white font-medium">Deploy Sonrası Otomatik Başlat</h3>
+                            <p class="text-gray-400 text-sm">Railway/Render gibi platformlarda otomatik başlatma</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="auto_start_on_deploy" name="auto_start_on_deploy" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+
+                    <div class="flex items-center justify-between p-4 bg-gray-800/30 rounded-lg">
+                        <div>
+                            <h3 class="text-white font-medium">Demo Modu</h3>
+                            <p class="text-gray-400 text-sm">Güvenli test için gerçek APRS gönderimi yapma</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="demo_mode" name="demo_mode" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Durum Mesajı -->
+            <div class="bg-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    📢 APRS Durum Mesajı
+                </h2>
+                <div>
+                    <label for="aprs_status" class="block text-sm font-medium text-gray-300 mb-2">
+                        Durum Mesajı
+                    </label>
+                    <textarea id="aprs_status" name="aprs_status" rows="2"
+                              class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                              placeholder="QRV 144.800 MHz FM - Online and monitoring"></textarea>
+                    <p class="text-gray-400 text-xs mt-1">Bu mesaj durum paketi gönderildiğinde kullanılır</p>
+                </div>
+            </div>
+
+            <!-- Demo Mode Mesajı -->
+            <div class="bg-gray-900/40 backdrop-blur-sm border border-gray-700/50 rounded-lg p-6">
+                <h2 class="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+                    🚨 Demo Mode Mesajı
+                </h2>
+                <div>
+                    <label for="demo_message" class="block text-sm font-medium text-gray-300 mb-2">
+                        Demo Mode Mesajı
+                    </label>
+                    <textarea id="demo_message" name="demo_message" rows="3"
+                              class="w-full px-3 py-2 bg-gray-800/60 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                              placeholder="🚨 Bu Railway demo versiyonudur. Gerçek APRS gönderimi sadece yetkili operatörler tarafından yapılabilir."></textarea>
+                    <p class="text-gray-400 text-xs mt-1">Demo mode aktifken kullanıcılara gösterilecek uyarı mesajı</p>
+                </div>
+            </div>
+
+            <!-- Butonlar -->
+            <div class="flex gap-4 justify-end">
+                <button type="button" id="resetBtn" 
+                        class="bg-gray-600 hover:bg-gray-700 text-white font-medium px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2">
+                    <span>🔄</span>
+                    <span>Sıfırla</span>
+                </button>
+                <button type="button" id="loadBtn" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-lg transition-all duration-300 flex items-center gap-2">
+                    <span>📂</span>
+                    <span>Yükle</span>
+                </button>
+                <button type="submit" id="saveBtn"
+                        class="bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-all duration-300 transform hover:scale-105 animate-glow flex items-center gap-2">
+                    <span>💾</span>
+                    <span>Kaydet</span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Bilgi Mesajı -->
+        <div id="messageArea" class="mt-6"></div>
+    </div>
+
+    <script>
+        // Form elementleri
+        const form = document.getElementById('settingsForm');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const messageArea = document.getElementById('messageArea');
+
+        // Mesaj gösterme fonksiyonu
+        function showMessage(message, type = 'info') {
+            const colors = {
+                info: 'bg-blue-500/20 border-blue-500/50 text-blue-200',
+                success: 'bg-green-500/20 border-green-500/50 text-green-200',
+                error: 'bg-red-500/20 border-red-500/50 text-red-200',
+                warning: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-200'
+            };
+
+            messageArea.innerHTML = `
+                <div class="border rounded-lg p-4 ${colors[type]} transition-all duration-300">
+                    ${message}
+                </div>
+            `;
+
+            // 5 saniye sonra mesajı kaldır
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        }
+
+        // Form verilerini nesne olarak al
+        function getFormData() {
+            const formData = new FormData(form);
+            const data = {};
+            
+            // Text/number/select alanları
+            for (let [key, value] of formData.entries()) {
+                if (key !== 'auto_send_enabled' && key !== 'auto_start_on_deploy' && key !== 'demo_mode') {
+                    data[key] = value;
+                }
+            }
+            
+            // Checkbox'lar
+            data.auto_send_enabled = document.getElementById('auto_send_enabled').checked;
+            data.auto_start_on_deploy = document.getElementById('auto_start_on_deploy').checked;
+            data.demo_mode = document.getElementById('demo_mode').checked;
+            
+            return data;
+        }
+
+        // Form verilerini doldur
+        function setFormData(data) {
+            Object.keys(data).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        element.checked = data[key] === true || data[key] === 'true';
+                    } else {
+                        element.value = data[key] || '';
+                    }
+                }
+            });
+        }
+
+        // Varsayılan değerleri yükle
+        function loadDefaults() {
+            const defaults = {
+                callsign: 'TB2ABI',
+                symbol: '/-',
+                latitude: '41.011805',
+                longitude: '29.125039',
+                comment: 'Mustafa Genç\\nhttps://mustafagenc.info',
+                aprs_is_server: 'euro.aprs2.net',
+                aprs_is_port: '14580',
+                aprs_is_passcode: '',
+                aprs_path: 'WIDE1-1,WIDE2-1',
+                auto_send_interval: '600',
+                auto_send_count: '10',
+                web_port: '3000',
+                auto_send_enabled: true,
+                auto_start_on_deploy: true,
+                demo_mode: false,
+                aprs_status: 'QRV 144.800 MHz FM - Online and monitoring',
+                demo_message: '🚨 Bu Railway demo versiyonudur. Gerçek APRS gönderimi sadece yetkili operatörler tarafından yapılabilir.'
+            };
+            
+            setFormData(defaults);
+            showMessage('✅ Varsayılan değerler yüklendi', 'success');
+        }
+
+        // Form submit olayı
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const data = getFormData();
+            
+            // Basit doğrulama
+            if (!data.callsign) {
+                showMessage('❌ Çağrı işareti gerekli!', 'error');
+                return;
+            }
+            
+            if (!data.latitude || !data.longitude) {
+                showMessage('❌ Enlem ve boylam gerekli!', 'error');
+                return;
+            }
+
+            // Burada ayarları kaydetme işlemi yapılacak
+            console.log('Kaydedilecek ayarlar:', data);
+            showMessage('💾 Ayarlar kaydedildi! (Geliştirme aşamasında)', 'success');
+        });
+
+        // Sıfırla butonu
+        resetBtn.addEventListener('click', () => {
+            if (confirm('Tüm ayarlar varsayılan değerlere sıfırlanacak. Emin misiniz?')) {
+                loadDefaults();
+            }
+        });
+
+        // Yükle butonu
+        loadBtn.addEventListener('click', () => {
+            // Burada mevcut .env dosyasından ayarları yükleme işlemi yapılacak
+            showMessage('📂 Mevcut ayarlar yüklendi! (Geliştirme aşamasında)', 'info');
+        });
+
+        // Sayfa yüklendiğinde varsayılan değerleri yükle
+        window.addEventListener('load', () => {
+            loadDefaults();
+            setupSymbolSearch();
+        });
+
+        // Sembol arama işlevselliği
+        function setupSymbolSearch() {
+            const symbolInput = document.getElementById('symbol');
+            const symbolList = document.getElementById('symbolList');
+            
+            // Sembol verileri
+            const symbols = [
+                { value: '/-', label: '🚗 /- Araba (Car)' },
+                { value: '\\-', label: '🚙 \\- SUV/Kamyonet' },
+                { value: '/k', label: '🚚 /k Kamyon (Truck)' },
+                { value: '/v', label: '🚐 /v Van' },
+                { value: '/b', label: '🚲 /b Bisiklet (Bicycle)' },
+                { value: '/f', label: '🚁 /f Yangın Söndürme/İtfaiye' },
+                { value: '/p', label: '👤 /p Kişi (Person)' },
+                { value: '/m', label: '🏠 /m Ev/Hane (House)' },
+                { value: '/r', label: '📻 /r Repeater' },
+                { value: '/w', label: '🌧️ /w Hava İstasyonu' },
+                { value: '\\\\', label: '🏢 \\\\ Bina (Building)' },
+                { value: '/c', label: '📱 /c Mobil Telefon' },
+                { value: '/s', label: '🛰️ /s Gemi/Tekne (Ship)' },
+                { value: '/a', label: '🚑 /a Ambulans' },
+                { value: '/e', label: '👁️ /e Göz (Eyeball/Event)' },
+                { value: '/j', label: '🏥 /j Hastane' },
+                { value: '/u', label: '🚌 /u Otobüs' },
+                { value: '/g', label: '✈️ /g Uçak (Aircraft)' },
+                { value: '/h', label: '🏨 /h Otel' },
+                { value: '/i', label: '📡 /i TCP/IP İstasyonu' },
+                { value: '/n', label: '⚓ /n Gemi Demirleme' },
+                { value: '/o', label: '🚂 /o Tren (Train)' },
+                { value: '/q', label: '⛽ /q Benzin İstasyonu' },
+                { value: '/t', label: '🎯 /t Hedef/Target' },
+                { value: '/x', label: '⚠️ /x Kaza (Accident)' },
+                { value: '/y', label: '🌟 /y Yacht/Yelkenli' },
+                { value: '/z', label: '🏃 /z Shelter/Barınak' },
+                { value: '/#', label: '📍 /# Dijit/Number Station' },
+                { value: '/*', label: '❄️ /* Kar/Snow' },
+                { value: '/&', label: '🔧 /& HF Gateway' },
+                { value: '/@', label: '🌀 /@ Kasırga/Hurricane' },
+                { value: '/!', label: '🚨 /! Acil Durum/Emergency' },
+                { value: '/[', label: '📐 /[ İnsan/Human' },
+                { value: '/]', label: '📦 /] Kutu/Box' },
+                { value: '/{', label: '📊 /{ Mevcut/Available' },
+                { value: '/}', label: '📋 /} Meşgul/Unavailable' },
+                { value: '/+', label: '🔴 /+ Kızıl Haç' },
+                { value: '/l', label: '💡 /l Lighthouse/Deniz Feneri' },
+                { value: '/d', label: '🐕 /d Köpek' },
+                { value: '/1', label: '🔵 /1 Mavi Nokta' },
+                { value: '/2', label: '🟢 /2 Yeşil Nokta' },
+                { value: '/3', label: '🟡 /3 Sarı Nokta' },
+                { value: '/4', label: '🔴 /4 Kırmızı Nokta' },
+                { value: '/5', label: '⚫ /5 Siyah Nokta' },
+                { value: '/6', label: '🟣 /6 Mor Nokta' },
+                { value: '/7', label: '🟠 /7 Turuncu Nokta' },
+                { value: '/8', label: '🤍 /8 Beyaz Nokta' },
+                { value: '/9', label: '🟤 /9 Kahverengi Nokta' },
+                { value: '/0', label: '⭕ /0 Çember' }
+            ];
+
+            // Arama fonksiyonu
+            symbolInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                
+                // Datalist'i temizle
+                symbolList.innerHTML = '';
+                
+                // Filtreleme yap
+                const filtered = symbols.filter(symbol => 
+                    symbol.label.toLowerCase().includes(searchTerm) ||
+                    symbol.value.toLowerCase().includes(searchTerm)
+                );
+                
+                // Filtrelenmiş sonuçları ekle
+                filtered.forEach(symbol => {
+                    const option = document.createElement('option');
+                    option.value = symbol.value;
+                    option.textContent = symbol.label;
+                    symbolList.appendChild(option);
+                });
+                
+                // Eğer tam eşleşme varsa input'u güncelle
+                const exactMatch = symbols.find(symbol => 
+                    symbol.value === searchTerm || symbol.label.toLowerCase() === searchTerm
+                );
+                
+                if (exactMatch && e.target.value !== exactMatch.value) {
+                    // Otomatik tamamlama önerisinde bulunabilir
+                }
+            });
+
+            // Seçim yapıldığında sadece değeri göster
+            symbolInput.addEventListener('change', (e) => {
+                const selectedSymbol = symbols.find(symbol => symbol.value === e.target.value);
+                if (selectedSymbol) {
+                    // Değer zaten doğru, bir şey yapmaya gerek yok
+                    console.log('Seçilen sembol:', selectedSymbol.label);
+                }
+                
+                // Rengi zorla ayarla
+                setTimeout(() => {
+                    symbolInput.style.backgroundColor = 'rgba(31, 41, 55, 0.6)';
+                    symbolInput.style.color = 'white';
+                }, 10);
+            });
+            
+            // Input event'inde de renk kontrolü
+            symbolInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                
+                // Rengi zorla ayarla
+                e.target.style.backgroundColor = 'rgba(31, 41, 55, 0.6)';
+                e.target.style.color = 'white';
+                
+                // ...existing code...
+            });
+            
+            // Blur event'inde de kontrol et
+            symbolInput.addEventListener('blur', (e) => {
+                setTimeout(() => {
+                    e.target.style.backgroundColor = 'rgba(31, 41, 55, 0.6)';
+                    e.target.style.color = 'white';
+                }, 10);
+            });
+        }
+    </script>
+</body>
+</html>
