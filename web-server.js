@@ -9,6 +9,9 @@ require('dotenv').config();
 // APRS sınıflarını import et
 const { APRSPositionSender, APRSISClient, calculatePasscode } = require('./index.js');
 
+// Electron modu kontrolü
+const isElectronMode = process.env.ELECTRON_MODE === 'true';
+
 // Package.json'dan versiyon bilgisini oku
 let packageInfo = {};
 try {
@@ -25,6 +28,16 @@ const io = socketIo(server);
 
 const PORT = process.env.PORT || process.env.WEB_PORT || 3000;
 
+// Electron modunda farklı log çıktısı
+function log(message) {
+    const timestamp = new Date().toISOString();
+    if (isElectronMode) {
+        console.log(`[${timestamp}] ${message}`);
+    } else {
+        console.log(message);
+    }
+}
+
 // Log helper fonksiyonu - undefined döndürmesini engeller
 function emitLog(type, message) {
     io.emit('log', { type, message });
@@ -35,6 +48,16 @@ function emitLog(type, message) {
 // Static dosyalar için middleware
 app.use(express.static('public'));
 app.use(express.json());
+
+// API endpoint - config bilgilerini al
+app.get('/api/config', (req, res) => {
+    res.json({
+        version: packageInfo.version || '1.0.0',
+        name: packageInfo.name || 'APRS Position Sender',
+        callsign: process.env.CALLSIGN || 'N/A',
+        demoMode: process.env.DEMO_MODE === 'true'
+    });
+});
 
 // Ana sayfa
 app.get('/', (req, res) => {
@@ -56,7 +79,8 @@ app.get('/api/config', (req, res) => {
         demoMode: process.env.DEMO_MODE === 'true',
         demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
         version: packageInfo.version || '1.0.0',
-        appName: packageInfo.name || 'APRS-FI'
+        appName: packageInfo.name || 'APRS-FI',
+        isElectron: isElectronMode
     });
 });
 
@@ -84,7 +108,8 @@ io.on('connection', (socket) => {
         demoMode: process.env.DEMO_MODE === 'true',
         demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
         version: packageInfo.version || '1.0.0',
-        appName: packageInfo.name || 'APRS-FI'
+        appName: packageInfo.name || 'APRS-FI',
+        isElectron: isElectronMode
     });
     
     // Eğer otomatik process çalışıyorsa bunu bildir
@@ -301,13 +326,19 @@ process.on('SIGINT', () => {
 });
 
 server.listen(PORT, () => {
-    console.log(`🌐 APRS Web Arayüzü çalışıyor: http://localhost:${PORT}`);
-    console.log(`📡 APRS gönderimlerini web üzerinden kontrol edebilirsiniz`);
+    if (isElectronMode) {
+        console.log(`🖥️  APRS-FI Desktop sunucusu başlatıldı: http://localhost:${PORT}`);
+        console.log(`📡 Electron modu aktif - Desktop uygulaması hazır`);
+    } else {
+        console.log(`🌐 APRS Web Arayüzü çalışıyor: http://localhost:${PORT}`);
+        console.log(`📡 APRS gönderimlerini web üzerinden kontrol edebilirsiniz`);
+    }
     
     // Environment variables debug
     console.log(`🔍 AUTO_START_ON_DEPLOY: ${process.env.AUTO_START_ON_DEPLOY}`);
     console.log(`🔍 DEMO_MODE: ${process.env.DEMO_MODE}`);
     console.log(`🔍 CALLSIGN: ${process.env.CALLSIGN}`);
+    console.log(`🔍 ELECTRON_MODE: ${isElectronMode}`);
     
     // Sunucu başlarken otomatik gönderimi başlat
     if (process.env.AUTO_START_ON_DEPLOY === 'true') {
