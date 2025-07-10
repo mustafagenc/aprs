@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60  # Timeout'u artır
     
     strategy:
       matrix:
@@ -32,23 +33,47 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Electron app
-        run: npm run electron-pack
+      # macOS için sadece x64 arch build et (hızlandırmak için)
+      - name: Build Electron app (macOS - optimized)
+        if: matrix.platform == 'macos'
+        run: npm run electron-pack -- --mac --x64 --publish=never
         env:
           NODE_ENV: production
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Linux için sadece gerekli target'ları build et
+      - name: Build Electron app (Linux - optimized)
+        if: matrix.platform == 'linux'
+        run: npm run electron-pack -- --linux --x64 --publish=never
+        env:
+          NODE_ENV: production
+
+      # Windows için sadece gerekli target'ları build et
+      - name: Build Electron app (Windows - optimized)
+        if: matrix.platform == 'windows'
+        run: npm run electron-pack -- --win --x64 --publish=never
+        env:
+          NODE_ENV: production
 
       - name: List dist files (Debug)
         run: |
           echo "Listing dist directory:"
           ls -la dist/ || echo "dist directory not found"
+          find dist/ -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.exe" -o -name "*.msi" || echo "No build artifacts found"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: dist/*
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/*.exe
+            dist/*.msi
           retention-days: 1
+          if-no-files-found: error
 
   create-release:
     needs: build
@@ -57,6 +82,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Tüm git geçmişini al
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -104,7 +131,7 @@ jobs:
           - 🪟 **Windows**: EXE (Portable), MSI (Installer)
           - 🍎 **macOS**: DMG (Universal), ZIP (Portable)
           
-          ### � Bu Sürümdeki Değişiklikler
+          ### 🔄 Bu Sürümdeki Değişiklikler
           ${COMMITS}
           
           ### 📥 İndirme ve Kurulum
