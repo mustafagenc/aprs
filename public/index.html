@@ -1077,12 +1077,19 @@
             
             // SVG'yi yükle ve ekle
             fetch(randomSat.svg)
-                .then(response => response.text())
+                .then(response => {
+                    console.log('SVG yükleme:', randomSat.svg, 'Durum:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.text();
+                })
                 .then(svgContent => {
+                    console.log('SVG içerik yüklendi:', randomSat.svg);
                     satellite.innerHTML = svgContent;
                 })
                 .catch(error => {
-                    console.warn('SVG yüklenemedi:', error);
+                    console.warn('SVG yüklenemedi:', randomSat.svg, error);
                     // Fallback olarak emoji kullan
                     satellite.innerHTML = '🛰️';
                     satellite.style.fontSize = '24px';
@@ -1115,7 +1122,7 @@
         }
 
         // Uzay efektlerini başlat
-        setTimeout(startSatellites, 2000);
+        // setTimeout(startSatellites, 2000); // Uydu animasyonları geçici olarak devre dışı
 
         // Konfigürasyon kartlarını oluştur
         function createConfigCards(config) {
