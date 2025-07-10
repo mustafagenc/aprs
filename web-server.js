@@ -110,12 +110,86 @@ function safeSpawn(command, args, options = {}) {
         const scriptName = args[0]; // 'index.js'
         const scriptArgs = args.slice(1); // ['--auto'] gibi
         
-        return fork(path.join(__dirname, scriptName), scriptArgs, {
-            cwd: options.cwd || __dirname,
-            silent: true,
+        // Script yolunu belirle - Electron packaged app'te doğru çalışması için
+        let scriptPath;
+        const appPath = process.env.APP_PATH || __dirname;
+        
+        // Packaged app detection
+        const isPackaged = process.env.APP_PATH && (
+            process.env.APP_PATH.includes('app.asar') || 
+            process.env.APP_PATH.includes('Resources/app')
+        );
+        
+        console.log(`🔧 Script path detection:`);
+        console.log(`   appPath: ${appPath}`);
+        console.log(`   isPackaged: ${isPackaged}`);
+        console.log(`   __dirname: ${__dirname}`);
+        
+        if (isPackaged) {
+            // Packaged app - app.asar içindeki dosyalar
+            scriptPath = path.join(appPath, scriptName);
+        } else if (process.env.APP_PATH) {
+            // Environment'tan gelen app path
+            scriptPath = path.join(process.env.APP_PATH, scriptName);
+        } else {
+            // Development mode - normal __dirname
+            scriptPath = path.join(__dirname, scriptName);
+        }
+        
+        // Eğer script bulunamazsa farklı yolları dene
+        if (!fs.existsSync(scriptPath)) {
+            console.log(`⚠️ Script not found at: ${scriptPath}`);
+            
+            const fallbackPaths = [
+                path.join(__dirname, scriptName),
+                path.join(appPath, scriptName),
+                path.join(process.cwd(), scriptName)
+            ];
+            
+            for (const fallbackPath of fallbackPaths) {
+                console.log(`🔍 Trying fallback: ${fallbackPath}, exists: ${fs.existsSync(fallbackPath)}`);
+                if (fs.existsSync(fallbackPath)) {
+                    scriptPath = fallbackPath;
+                    break;
+                }
+            }
+        }
+        
+        console.log(`🔧 Electron modunda fork işlemi başlatılıyor:`);
+        console.log(`   Script: ${scriptPath}`);
+        console.log(`   Args: ${scriptArgs.join(' ')}`);
+        console.log(`   CWD: ${options.cwd || __dirname}`);
+        console.log(`   Script exists: ${fs.existsSync(scriptPath)}`);
+        
+        // Script dosyasının varlığını kontrol et
+        if (!fs.existsSync(scriptPath)) {
+            const error = new Error(`Script not found: ${scriptPath}`);
+            console.error(`❌ ${error.message}`);
+            throw error;
+        }
+        
+        const childProcess = fork(scriptPath, scriptArgs, {
+            cwd: process.env.APP_PATH || __dirname,
+            silent: false, // Logging için false yap
             stdio: ['pipe', 'pipe', 'pipe', 'ipc'], // IPC channel eklendi
-            env: { ...process.env, ...options.env }
+            env: { ...process.env, ...options.env },
+            execArgv: [] // Parent process'in node flags'lerini kopyalama
         });
+        
+        // Child process error handling
+        childProcess.on('error', (err) => {
+            console.error(`❌ Child process error (${scriptName}):`, err);
+        });
+        
+        childProcess.on('exit', (code, signal) => {
+            if (signal) {
+                console.log(`⚠️ Child process killed by signal: ${signal}`);
+            } else if (code !== 0) {
+                console.log(`⚠️ Child process exited with code: ${code}`);
+            }
+        });
+        
+        return childProcess;
     } else {
         // Normal ortamda spawn kullan
         const nodePath = getNodePath();
@@ -298,94 +372,137 @@ io.on('connection', (socket) => {
 
     // Otomatik gönderim başlat
     socket.on('start-auto', () => {
-        // Demo mode kontrolü
-        if (process.env.DEMO_MODE === 'true') {
-            socket.emit('log', { 
-                type: 'warning', 
-                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+        try {
+            // Demo mode kontrolü
+            if (process.env.DEMO_MODE === 'true') {
+                socket.emit('log', { 
+                    type: 'warning', 
+                    message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+                });
+                return;
+            }
+
+            if (activeProcesses.auto) {
+                socket.emit('log', { type: 'warning', message: '⚠️ Otomatik gönderim zaten çalışıyor!' });
+                return;
+            }
+
+            socket.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatılıyor...' });
+            
+            activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
+                cwd: process.env.APP_PATH || __dirname
             });
-            return;
-        }
 
-        if (activeProcesses.auto) {
-            socket.emit('log', { type: 'warning', message: '⚠️ Otomatik gönderim zaten çalışıyor!' });
-            return;
-        }
+            // Process error handling
+            activeProcesses.auto.on('error', (err) => {
+                console.error('❌ Auto process error:', err);
+                io.emit('log', { type: 'error', message: `❌ Process hatası: ${err.message}` });
+                activeProcesses.auto = null;
+                io.emit('status', { auto: false, send: false });
+            });
 
-        socket.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatılıyor...' });
-        
-        activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
-            cwd: __dirname
-        });
+            activeProcesses.auto.stdout.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'info', message: message }); // Sadece tüm client'lara gönder
+                }
+            });
 
-        activeProcesses.auto.stdout.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'info', message: message }); // Sadece tüm client'lara gönder
-            }
-        });
+            activeProcesses.auto.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                }
+            });
 
-        activeProcesses.auto.stderr.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'error', message: `❌ ${message}` });
-            }
-        });
+            activeProcesses.auto.on('close', (code, signal) => {
+                activeProcesses.auto = null;
+                let message;
+                if (signal) {
+                    message = `🏁 Otomatik gönderim durduruldu (Signal: ${signal})`;
+                } else {
+                    message = `🏁 Otomatik gönderim tamamlandı (Exit code: ${code})`;
+                }
+                io.emit('log', { type: 'info', message: message });
+                io.emit('status', { auto: false, send: false });
+            });
 
-        activeProcesses.auto.on('close', (code) => {
+            // Process başlatıldığında durum güncelle
+            io.emit('status', { auto: true, send: false });
+            
+        } catch (error) {
+            console.error('❌ start-auto error:', error);
+            socket.emit('log', { type: 'error', message: `❌ Otomatik gönderim başlatılamadı: ${error.message}` });
             activeProcesses.auto = null;
-            const message = `🏁 Otomatik gönderim tamamlandı (Exit code: ${code})`;
-            io.emit('log', { type: 'info', message: message });
             io.emit('status', { auto: false, send: false });
-        });
-
-        io.emit('status', { auto: true, send: false });
+        }
     });
 
     // Tek gönderim
     socket.on('send-once', () => {
-        // Demo mode kontrolü
-        if (process.env.DEMO_MODE === 'true') {
-            socket.emit('log', { 
-                type: 'warning', 
-                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+        try {
+            // Demo mode kontrolü
+            if (process.env.DEMO_MODE === 'true') {
+                socket.emit('log', { 
+                    type: 'warning', 
+                    message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+                });
+                return;
+            }
+
+            if (activeProcesses.send) {
+                socket.emit('log', { type: 'warning', message: '⚠️ Gönderim zaten çalışıyor!' });
+                return;
+            }
+
+            socket.emit('log', { type: 'info', message: '📡 Tek gönderim başlatılıyor...' });
+            
+            activeProcesses.send = safeSpawn('node', ['index.js', '--send'], {
+                cwd: process.env.APP_PATH || __dirname
             });
-            return;
-        }
 
-        if (activeProcesses.send) {
-            socket.emit('log', { type: 'warning', message: '⚠️ Gönderim zaten çalışıyor!' });
-            return;
-        }
+            // Process error handling
+            activeProcesses.send.on('error', (err) => {
+                console.error('❌ Send process error:', err);
+                io.emit('log', { type: 'error', message: `❌ Gönderim hatası: ${err.message}` });
+                activeProcesses.send = null;
+                io.emit('status', { auto: !!activeProcesses.auto, send: false });
+            });
 
-        socket.emit('log', { type: 'info', message: '📡 Tek gönderim başlatılıyor...' });
-        
-        activeProcesses.send = safeSpawn('node', ['index.js', '--send'], {
-            cwd: __dirname
-        });
+            activeProcesses.send.stdout.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'info', message: message });
+                }
+            });
 
-        activeProcesses.send.stdout.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
+            activeProcesses.send.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                }
+            });
+
+            activeProcesses.send.on('close', (code, signal) => {
+                activeProcesses.send = null;
+                let message;
+                if (signal) {
+                    message = `✅ Tek gönderim durduruldu (Signal: ${signal})`;
+                } else {
+                    message = `✅ Tek gönderim tamamlandı (Exit code: ${code})`;
+                }
                 io.emit('log', { type: 'info', message: message });
-            }
-        });
+                io.emit('status', { auto: !!activeProcesses.auto, send: false });
+            });
 
-        activeProcesses.send.stderr.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'error', message: `❌ ${message}` });
-            }
-        });
-
-        activeProcesses.send.on('close', (code) => {
+            io.emit('status', { auto: !!activeProcesses.auto, send: true });
+            
+        } catch (error) {
+            console.error('❌ send-once error:', error);
+            socket.emit('log', { type: 'error', message: `❌ Tek gönderim başlatılamadı: ${error.message}` });
             activeProcesses.send = null;
-            const message = `✅ Tek gönderim tamamlandı (Exit code: ${code})`;
-            io.emit('log', { type: 'info', message: message });
             io.emit('status', { auto: !!activeProcesses.auto, send: false });
-        });
-
-        io.emit('status', { auto: !!activeProcesses.auto, send: true });
+        }
     });
 
     // Process'leri durdur
@@ -403,39 +520,56 @@ io.on('connection', (socket) => {
 
     // Durum bilgisi gönder
     socket.on('send-status', () => {
-        // Demo mode kontrolü
-        if (process.env.DEMO_MODE === 'true') {
-            socket.emit('log', { 
-                type: 'warning', 
-                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+        try {
+            // Demo mode kontrolü
+            if (process.env.DEMO_MODE === 'true') {
+                socket.emit('log', { 
+                    type: 'warning', 
+                    message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+                });
+                return;
+            }
+
+            socket.emit('log', { type: 'info', message: '📢 Durum bilgisi gönderiliyor...' });
+            
+            const statusProcess = safeSpawn('node', ['index.js', '--status'], {
+                cwd: process.env.APP_PATH || __dirname
             });
-            return;
-        }
 
-        socket.emit('log', { type: 'info', message: '📢 Durum bilgisi gönderiliyor...' });
-        
-        const statusProcess = safeSpawn('node', ['index.js', '--status'], {
-            cwd: __dirname
-        });
+            // Process error handling
+            statusProcess.on('error', (err) => {
+                console.error('❌ Status process error:', err);
+                io.emit('log', { type: 'error', message: `❌ Durum gönderim hatası: ${err.message}` });
+            });
 
-        statusProcess.stdout.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
+            statusProcess.stdout.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'info', message: message });
+                }
+            });
+
+            statusProcess.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                }
+            });
+
+            statusProcess.on('close', (code, signal) => {
+                let message;
+                if (signal) {
+                    message = `📢 Durum gönderimi durduruldu (Signal: ${signal})`;
+                } else {
+                    message = `📢 Durum gönderimi tamamlandı (Exit code: ${code})`;
+                }
                 io.emit('log', { type: 'info', message: message });
-            }
-        });
-
-        statusProcess.stderr.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'error', message: `❌ ${message}` });
-            }
-        });
-
-        statusProcess.on('close', (code) => {
-            const message = `📢 Durum gönderimi tamamlandı (Exit code: ${code})`;
-            io.emit('log', { type: 'info', message: message });
-        });
+            });
+            
+        } catch (error) {
+            console.error('❌ send-status error:', error);
+            socket.emit('log', { type: 'error', message: `❌ Durum gönderimi başlatılamadı: ${error.message}` });
+        }
     });
 
     // Bağlantı koptuğunda
@@ -555,7 +689,7 @@ server.listen(PORT, () => {
                 
                 try {
                     activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
-                        cwd: __dirname
+                        cwd: process.env.APP_PATH || __dirname
                     });
 
                     activeProcesses.auto.stdout.on('data', (data) => {
