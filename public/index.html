@@ -844,8 +844,51 @@
     </div>
 
     <script>
-        // Socket.IO bağlantısı
-        const socket = io();
+        // Socket.IO bağlantısı - reconnection ayarları ile
+        const socket = io({
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            maxReconnectionAttempts: 5,
+            timeout: 20000,
+            forceNew: false
+        });
+        
+        // Socket bağlantı olayları
+        socket.on('connect', () => {
+            console.log('✅ Socket bağlandı:', socket.id);
+            addLog('success', '🔗 Sunucuya bağlanıldı');
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('❌ Socket bağlantısı kesildi:', reason);
+            addLog('warning', `⚠️ Sunucu bağlantısı kesildi: ${reason}`);
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('🔌 Socket bağlantı hatası:', error);
+            addLog('error', '❌ Sunucu bağlantı hatası');
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+            console.log('🔄 Socket yeniden bağlandı, deneme:', attemptNumber);
+            addLog('success', `🔄 Sunucuya yeniden bağlanıldı (${attemptNumber}. deneme)`);
+        });
+
+        socket.on('reconnecting', (attemptNumber) => {
+            console.log('🔄 Socket yeniden bağlanmaya çalışıyor, deneme:', attemptNumber);
+            addLog('info', `🔄 Sunucuya yeniden bağlanmaya çalışılıyor... (${attemptNumber}. deneme)`);
+        });
+
+        socket.on('reconnect_error', (error) => {
+            console.error('❌ Socket yeniden bağlantı hatası:', error);
+            addLog('error', '❌ Sunucuya yeniden bağlanılamadı');
+        });
+
+        socket.on('reconnect_failed', () => {
+            console.error('❌ Socket yeniden bağlantı başarısız');
+            addLog('error', '❌ Sunucuya bağlantı tamamen başarısız oldu');
+        });
         
         // DOM elementleri
         const startAutoBtn = document.getElementById('startAutoBtn');
@@ -1324,15 +1367,6 @@
 
         clearLogsBtn.addEventListener('click', () => {
             socket.emit('clear-logs');
-        });
-
-        // Bağlantı durumları
-        socket.on('connect', () => {
-            addLog('info', '🔗 Web arayüzü bağlandı');
-        });
-
-        socket.on('disconnect', () => {
-            addLog('error', '❌ Web arayüzü bağlantısı kesildi');
         });
 
         // GitHub ikonu tıklama olayı

@@ -267,6 +267,11 @@ let activeProcesses = {
 io.on('connection', (socket) => {
     console.log('🌐 Web arayüzü bağlandı:', socket.id);
     
+    // Socket error handling
+    socket.on('error', (error) => {
+        console.error('Socket hatası:', error);
+    });
+    
     // Konfigürasyonu gönder
     socket.emit('config', {
         callsign: process.env.CALLSIGN || 'N/A',
@@ -434,8 +439,28 @@ io.on('connection', (socket) => {
     });
 
     // Bağlantı koptuğunda
-    socket.on('disconnect', () => {
-        console.log('🌐 Web arayüzü bağlantısı kesildi:', socket.id);
+    socket.on('disconnect', (reason) => {
+        console.log(`🌐 Web arayüzü bağlantısı kesildi: ${socket.id} - Neden: ${reason}`);
+        
+        // Bağlantı kopma nedenini logla
+        if (reason === 'io server disconnect') {
+            console.log('⚠️ Sunucu tarafından bağlantı kapatıldı');
+        } else if (reason === 'io client disconnect') {
+            console.log('⚠️ İstemci tarafından bağlantı kapatıldı');
+        } else if (reason === 'ping timeout') {
+            console.log('⚠️ Ping timeout - bağlantı zaman aşımı');
+        } else if (reason === 'transport close') {
+            console.log('⚠️ Transport kapandı');
+        } else if (reason === 'transport error') {
+            console.log('⚠️ Transport hatası');
+        } else {
+            console.log(`⚠️ Bilinmeyen neden: ${reason}`);
+        }
+    });
+
+    // Bağlantı hatası durumunda
+    socket.on('connect_error', (error) => {
+        console.error('🔌 Socket bağlantı hatası:', error);
     });
 
     // Mevcut durum bilgisi gönder
