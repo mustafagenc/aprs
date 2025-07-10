@@ -6,14 +6,68 @@ const fs = require('fs');
 // Electron modunu aktive et
 process.env.ELECTRON_MODE = 'true';
 
-// Geliştirme modunu kontrol et
-const isDev = process.env.NODE_ENV === 'development';
+// Geliştirme modunu kontrol et - daha robust bir yaklaşım
+const isDev = process.env.NODE_ENV === 'development' || 
+              !app.isPackaged || 
+              (process.execPath && process.execPath.includes('node_modules/electron')) ||
+              (process.argv && process.argv[0] && process.argv[0].includes('electron')) ||
+              (process.resourcesPath && process.resourcesPath.includes('node_modules/electron'));
+
+console.log(`🔍 Development mode checks:`);
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`   app.isPackaged: ${app.isPackaged}`);
+console.log(`   execPath includes electron: ${process.execPath && process.execPath.includes('node_modules/electron')}`);
+console.log(`   argv[0] includes electron: ${process.argv && process.argv[0] && process.argv[0].includes('electron')}`);
+console.log(`   resourcesPath includes electron: ${process.resourcesPath && process.resourcesPath.includes('node_modules/electron')}`);
+
+// App resources path'i belirle - packaged app'te doğru çalışması için
+const getAppPath = () => {
+    // Electron development modunda her zaman __dirname kullan
+    if (isDev) {
+        console.log(`📁 Using __dirname for dev mode: ${__dirname}`);
+        return __dirname;
+    } else {
+        // Packaged app'te dosyalar app.asar içinde
+        if (process.resourcesPath) {
+            // macOS packaged app'te app.asar kullanılır
+            const asarPath = path.join(process.resourcesPath, 'app.asar');
+            console.log(`📁 Checking asar path: ${asarPath}, exists: ${fs.existsSync(asarPath)}`);
+            
+            if (fs.existsSync(asarPath)) {
+                console.log(`📁 Using asar path: ${asarPath}`);
+                return asarPath;
+            }
+            
+            // Fallback olarak app dizini
+            const appPath = path.join(process.resourcesPath, 'app');
+            console.log(`📁 Checking app path: ${appPath}, exists: ${fs.existsSync(appPath)}`);
+            
+            if (fs.existsSync(appPath)) {
+                console.log(`📁 Using app path: ${appPath}`);
+                return appPath;
+            }
+        }
+        
+        // Son fallback - __dirname
+        console.log(`📁 Using fallback __dirname: ${__dirname}`);
+        return __dirname;
+    }
+};
+
+console.log(`📁 App path: ${getAppPath()}`);
+console.log(`📁 __dirname: ${__dirname}`);
+console.log(`📁 process.resourcesPath: ${process.resourcesPath}`);
+console.log(`📁 isDev: ${isDev}`);
+console.log(`📁 process.execPath: ${process.execPath}`);
+console.log(`📁 process.argv[0]: ${process.argv[0]}`);
 
 // Pencere referansı
 let mainWindow;
 let settingsWindow;
 let tray;
 let webServerProcess;
+let webServerRestartCount = 0;
+const MAX_RESTART_ATTEMPTS = 3;
 
 // Web sunucu portu
 const WEB_SERVER_PORT = process.env.PORT || 3000;
@@ -27,7 +81,7 @@ function createWindow() {
         width: 1400,
         height: 900,
         minWidth: 1200,
-        minHeight: 700,
+        minHeight: 800,
         icon: path.join(__dirname, 'public/favicon/favicon-16x16.png'),
         webPreferences: {
             nodeIntegration: false,
@@ -115,21 +169,57 @@ function createWindow() {
 function startWebServer() {
     console.log('🚀 Web sunucusu başlatılıyor...');
     
-    // Electron ortamında fork kullan
-    const { fork } = require('child_process');
-    
     // User data path'i al
     const userDataPath = app.getPath('userData');
     console.log(`📁 User data path: ${userDataPath}`);
     
-    webServerProcess = fork(path.join(__dirname, 'web-server.js'), [], {
+    const appPath = getAppPath();
+    console.log(`🔧 App path for web server: ${appPath}`);
+    
+    // Her iki modda da fork kullan, sadece path'leri farklı ayarla
+    const { fork } = require('child_process');
+    
+    let webServerPath;
+    let workingDirectory;
+    
+    if (isDev) {
+        // Development mode
+        webServerPath = path.join(__dirname, 'web-server.js');
+        workingDirectory = __dirname;
+    } else {
+        // Packaged mode - asar dosyasından çalıştır
+        webServerPath = path.join(appPath, 'web-server.js');
+        workingDirectory = appPath;
+    }
+    
+    console.log(`🔧 Web server script path: ${webServerPath}`);
+    console.log(`🔧 Working directory: ${workingDirectory}`);
+    console.log(`🔧 Script exists: ${fs.existsSync(webServerPath)}`);
+    
+    // Script dosyasının varlığını kontrol et
+    if (!fs.existsSync(webServerPath)) {
+        console.error(`❌ Web server script not found: ${webServerPath}`);
+        dialog.showErrorBox('Script Hatası', `Web server script bulunamadı: ${webServerPath}`);
+        return;
+    }
+    
+    webServerProcess = fork(webServerPath, [], {
         env: { 
             ...process.env, 
             ELECTRON_MODE: 'true',
-            USER_DATA_PATH: userDataPath
+            USER_DATA_PATH: userDataPath,
+            APP_PATH: isDev ? __dirname : appPath,
+            NODE_ENV: isDev ? 'development' : 'production'
         },
         silent: true,
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        cwd: workingDirectory
+    });
+
+    // Process error handling
+    webServerProcess.on('error', (error) => {
+        console.error('❌ Web server process error:', error);
+        handleWebServerCrash();
     });
 
     webServerProcess.stdout.on('data', (data) => {
@@ -140,15 +230,53 @@ function startWebServer() {
         console.error(`Web Server Error: ${data}`);
     });
 
-    webServerProcess.on('close', (code) => {
-        console.log(`Web server process exited with code ${code}`);
+    webServerProcess.on('close', (code, signal) => {
+        console.log(`Web server process exited with code ${code}, signal: ${signal}`);
+        
+        // Eğer beklenmedik bir çıkış ise restart dene
+        if (code !== 0 && code !== null && !signal) {
+            console.warn('⚠️ Web server unexpected exit, attempting restart...');
+            handleWebServerCrash();
+        }
+    });
+
+    webServerProcess.on('exit', (code, signal) => {
+        console.log(`Web server process exit event: code ${code}, signal: ${signal}`);
     });
 
     // Web sunucusunun başlamasını bekle ve URL'yi yükle
     setTimeout(() => {
         const url = `http://localhost:${WEB_SERVER_PORT}`;
         console.log(`📡 APRS-FI yükleniyor: ${url}`);
-        mainWindow.loadURL(url);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.loadURL(url);
+        }
+    }, 2000);
+}
+
+/**
+ * Web server crash durumunu handle et
+ */
+function handleWebServerCrash() {
+    if (webServerRestartCount >= MAX_RESTART_ATTEMPTS) {
+        console.error('❌ Maximum restart attempts reached, giving up');
+        
+        // Kullanıcıya bildir
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            dialog.showErrorBox(
+                'Web Server Hatası', 
+                'Web sunucusu başlatılamadı. Uygulama yeniden başlatılması gerekiyor.'
+            );
+        }
+        return;
+    }
+
+    webServerRestartCount++;
+    console.log(`🔄 Web server restarting... (attempt ${webServerRestartCount}/${MAX_RESTART_ATTEMPTS})`);
+    
+    // Kısa bir bekleme sonrası yeniden başlat
+    setTimeout(() => {
+        startWebServer();
     }, 2000);
 }
 

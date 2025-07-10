@@ -993,7 +993,13 @@
                 const currentVersion = configData.version;
                 
                 // GitHub API'den en son release'i al
-                const response = await fetch('https://api.github.com/repos/mustafagenc/aprs/releases/latest');
+                const response = await fetch('https://api.github.com/repos/mustafagenc/aprs/releases/latest', {
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'User-Agent': 'APRS-Position-Sender'
+                    }
+                });
+                
                 if (response.ok) {
                     const latestRelease = await response.json();
                     const latestVersion = latestRelease.tag_name.replace('v', ''); // "v1.0.2" -> "1.0.2"
@@ -1004,11 +1010,14 @@
                     } else {
                         console.log(`✅ Güncelleme kontrolü: v${currentVersion} güncel`);
                     }
+                } else if (response.status === 404) {
+                    console.log('Repository veya release bulunamadı (404)');
                 } else {
-                    console.log('GitHub API yanıt vermedi');
+                    console.log(`GitHub API yanıt vermedi (${response.status})`);
                 }
             } catch (error) {
-                console.log('Güncelleme kontrolü hatası:', error);
+                console.log('Güncelleme kontrolü hatası:', error.message);
+                // Network hataları için sessizce geç
             }
         }
 
@@ -1293,10 +1302,10 @@
             createConfigCards(config);
             addLog('info', `📋 Konfigürasyon yüklendi: ${data.callsign}`);
             
-            // Footer bilgilerini güncelle
-            footerCallsign.textContent = data.callsign;
-            if (data.appName) appName.textContent = data.appName;
-            if (data.version) appVersion.textContent = data.version;
+            // Footer bilgilerini güncelle (sadece element varsa)
+            if (footerCallsign) footerCallsign.textContent = data.callsign;
+            if (appName && data.appName) appName.textContent = data.appName;
+            if (appVersion && data.version) appVersion.textContent = data.version;
             
             // Demo mode kontrolü
             if (data.demoMode) {
