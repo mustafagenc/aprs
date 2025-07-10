@@ -1,0 +1,158 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0, v1.2.3 gibi tag'ler için çalışır
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run electron-pack
+        env:
+          NODE_ENV: production
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List dist files (Debug)
+        run: |
+          echo "Listing dist directory:"
+          ls -la dist/ || echo "dist directory not found"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-build
+          path: dist/*
+          retention-days: 1
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: List downloaded artifacts (Debug)
+        run: |
+          echo "Downloaded artifacts:"
+          find ./artifacts -type f
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          # En son tag'i al (mevcut tag hariç)
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.VERSION }}$" | head -n 1)
+          echo "PREV_TAG=${PREV_TAG}" >> $GITHUB_OUTPUT
+          echo "Previous tag: ${PREV_TAG}"
+
+      - name: Generate release notes from commits
+        id: release_notes
+        run: |
+          # Önceki tag'ten bu yana olan commit'leri al
+          PREV_TAG="${{ steps.prev_tag.outputs.PREV_TAG }}"
+          CURRENT_TAG="${{ steps.version.outputs.VERSION }}"
+          
+          if [ -z "$PREV_TAG" ]; then
+            # İlk release ise tüm commit'leri al
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            # Önceki tag'ten sonraki commit'leri al
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
+          fi
+          
+          # Release notlarını oluştur
+          cat > release_notes.md << EOF
+          ## 🚀 APRS Position Sender ${CURRENT_TAG}
+          
+          ### 📱 Desteklenen Platformlar
+          - 🐧 **Linux**: AppImage, DEB, RPM
+          - 🪟 **Windows**: EXE (Portable), MSI (Installer)
+          - 🍎 **macOS**: DMG (Universal), ZIP (Portable)
+          
+          ### � Bu Sürümdeki Değişiklikler
+          ${COMMITS}
+          
+          ### 📥 İndirme ve Kurulum
+          
+          **Linux Kullanıcıları:**
+          - \`.AppImage\` dosyasını indirin ve çalıştırma izni verin: \`chmod +x *.AppImage\`
+          - \`.deb\` (Ubuntu/Debian) veya \`.rpm\` (CentOS/Fedora) paketlerini de kullanabilirsiniz
+          
+          **Windows Kullanıcıları:**
+          - \`.exe\` (portable) dosyasını indirin ve çalıştırın
+          - \`.msi\` (installer) dosyası ile sistem geneli kurulum yapabilirsiniz
+          
+          **macOS Kullanıcıları:**
+          - \`.dmg\` dosyasını indirin ve Applications klasörüne sürükleyin
+          - \`.zip\` dosyası portable kullanım içindir
+          
+          ### 📖 Daha Fazla Bilgi
+          - [GitHub Repository](https://github.com/mustafagenc/aprs)
+          - [Kullanım Kılavuzu](https://github.com/mustafagenc/aprs/blob/main/README.md)
+          - [Hata Bildirimi](https://github.com/mustafagenc/aprs/issues)
+          
+          ### ❤️ Destek
+          Bu proje size faydalı olduysa:
+          - ⭐ GitHub'da yıldız verin
+          - 🍵 [Sponsor olun](https://github.com/sponsors/mustafagenc)
+          - 🐛 Hata bulursanız bildirin
+          
+          ---
+          **Geliştirici**: [Mustafa Genç](https://mustafagenc.info) (TB2ABI)  
+          **Lisans**: MIT
+          EOF
+          
+          echo "Release notes generated for ${CURRENT_TAG}"
+          echo "Changes since ${PREV_TAG:-'initial commit'}:"
+          echo "${COMMITS}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: "APRS Position Sender ${{ steps.version.outputs.VERSION }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            ./artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup artifacts
+        run: rm -rf ./artifacts release_notes.md

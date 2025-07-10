@@ -289,6 +289,120 @@
         const resetBtn = document.getElementById('resetBtn');
         const messageArea = document.getElementById('messageArea');
 
+        // Sayfa yüklendiğinde config'i yükle
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            setupSymbolSearch();
+            
+            // Form gönderim olayını dinle
+            if (form) {
+                form.addEventListener('submit', handleFormSubmit);
+            }
+            
+            // Kaydet butonu
+            if (saveBtn) {
+                saveBtn.addEventListener('click', handleFormSubmit);
+            }
+            
+            // Yükle butonu
+            if (loadBtn) {
+                loadBtn.addEventListener('click', loadConfig);
+            }
+        });
+
+        // Config verilerini API'den yükle
+        async function loadConfig() {
+            try {
+                showMessage('Ayarlar yükleniyor...', 'info');
+                
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                // Form alanlarını doldur
+                if (config.callsign && config.callsign !== 'N/A') {
+                    document.getElementById('callsign').value = config.callsign;
+                }
+                if (config.latitude && config.latitude !== 'N/A') {
+                    document.getElementById('latitude').value = config.latitude;
+                }
+                if (config.longitude && config.longitude !== 'N/A') {
+                    document.getElementById('longitude').value = config.longitude;
+                }
+                if (config.comment && config.comment !== 'N/A') {
+                    document.getElementById('comment').value = config.comment;
+                }
+                if (config.symbol && config.symbol !== 'N/A') {
+                    document.getElementById('symbol').value = config.symbol;
+                }
+                if (config.path && config.path !== 'N/A') {
+                    document.getElementById('aprs_path').value = config.path;
+                }
+                
+                // Otomatik gönderim ayarları
+                document.getElementById('auto_enabled').checked = config.autoEnabled === true;
+                if (config.interval) {
+                    document.getElementById('auto_interval').value = config.interval;
+                }
+                if (config.count) {
+                    document.getElementById('auto_count').value = config.count;
+                }
+                
+                // Demo mode
+                document.getElementById('demo_mode').checked = config.demoMode === true;
+                
+                showMessage('Ayarlar başarıyla yüklendi', 'success');
+                
+            } catch (error) {
+                console.error('Config yüklenirken hata:', error);
+                showMessage('Ayarlar yüklenirken hata oluştu', 'error');
+            }
+        }
+
+        // Form gönderim işleyicisi
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            try {
+                showMessage('Ayarlar kaydediliyor...', 'info');
+                
+                // Form verilerini topla
+                const formData = new FormData(form);
+                const configData = {
+                    callsign: formData.get('callsign'),
+                    latitude: formData.get('latitude'),
+                    longitude: formData.get('longitude'),
+                    comment: formData.get('comment'),
+                    symbol: formData.get('symbol'),
+                    path: formData.get('aprs_path'),
+                    autoEnabled: formData.get('auto_enabled') === 'on',
+                    interval: formData.get('auto_interval'),
+                    count: formData.get('auto_count'),
+                    demoMode: formData.get('demo_mode') === 'on'
+                };
+                
+                // API'ye gönder
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(configData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage('Ayarlar başarıyla kaydedildi!', 'success');
+                } else {
+                    showMessage(result.message || 'Ayarlar kaydedilirken hata oluştu', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Form gönderilirken hata:', error);
+                showMessage('Ayarlar kaydedilirken hata oluştu', 'error');
+            }
+        }
+
         // Mesaj gösterme fonksiyonu
         function showMessage(message, type = 'info') {
             const colors = {

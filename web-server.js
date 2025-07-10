@@ -4,13 +4,124 @@ const socketIo = require('socket.io');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-require('dotenv').config();
+const os = require('os');
+
+// Config dosyası yönetimi
+let configPath;
+let userConfigPath;
+
+// Electron modunda config dosyasını kullanıcı dizinine kopyala
+if (process.env.ELECTRON_MODE === 'true') {
+    // Electron modunda, ana process'ten userDataPath gelecek
+    const userDataPath = process.env.USER_DATA_PATH;
+    if (userDataPath) {
+        userConfigPath = path.join(userDataPath, 'config.env');
+        configPath = userConfigPath;
+    } else {
+        // Fallback olarak home directory kullan
+        const userHome = os.homedir();
+        userConfigPath = path.join(userHome, '.aprs-config.env');
+        configPath = userConfigPath;
+    }
+} else {
+    // Normal modda proje dizinindeki .env dosyasını kullan
+    configPath = path.join(__dirname, '.env');
+}
+
+// Config dosyasını initialize et
+function initializeConfig() {
+    const defaultConfigPath = path.join(__dirname, '.env');
+    console.log(`🔧 Config initialize - Default path: ${defaultConfigPath}`);
+    console.log(`🔧 Config initialize - User path: ${userConfigPath}`);
+    
+    // Kullanıcı config dosyası yoksa varsayılan dosyayı kopyala
+    if (userConfigPath && !fs.existsSync(userConfigPath)) {
+        console.log(`📝 User config dosyası bulunamadı, oluşturuluyor...`);
+        try {
+            if (fs.existsSync(defaultConfigPath)) {
+                fs.copyFileSync(defaultConfigPath, userConfigPath);
+                console.log(`✅ Config dosyası kopyalandı: ${userConfigPath}`);
+            } else {
+                console.log(`⚠️ Varsayılan config dosyası bulunamadı, yeni oluşturuluyor...`);
+                // Varsayılan config dosyası yoksa boş bir dosya oluştur
+                const defaultConfig = `CALLSIGN="N0CALL"
+LATITUDE="0.0"
+LONGITUDE="0.0"
+COMMENT="APRS Position Sender"
+SYMBOL="/>"
+APRS_PATH="APRS"
+AUTO_SEND_ENABLED="false"
+AUTO_SEND_INTERVAL="600"
+AUTO_SEND_COUNT="10"
+DEMO_MODE="false"`;
+                fs.writeFileSync(userConfigPath, defaultConfig);
+                console.log(`✅ Varsayılan config dosyası oluşturuldu: ${userConfigPath}`);
+            }
+        } catch (error) {
+            console.error('❌ Config dosyası kopyalanırken hata:', error.message);
+        }
+    } else if (userConfigPath) {
+        console.log(`✅ User config dosyası mevcut: ${userConfigPath}`);
+    }
+}
+
+// Config'i yükle
+function loadConfig() {
+    console.log(`🔧 Config yükleniyor - ELECTRON_MODE: ${process.env.ELECTRON_MODE}`);
+    console.log(`📁 Config path: ${configPath}`);
+    console.log(`📁 User config path: ${userConfigPath}`);
+    
+    // Config dosyasını initialize et
+    initializeConfig();
+    
+    // Config dosyasını dotenv ile yükle
+    require('dotenv').config({ path: configPath });
+    
+    console.log(`✅ Config yüklendi - CALLSIGN: ${process.env.CALLSIGN}`);
+}
+
+// Config'i yükle
+loadConfig();
 
 // APRS sınıflarını import et
 const { APRSPositionSender, APRSISClient, calculatePasscode } = require('./index.js');
 
 // Electron modu kontrolü
 const isElectronMode = process.env.ELECTRON_MODE === 'true';
+
+// Node.js executable path'ini belirle
+function getNodePath() {
+    if (isElectronMode) {
+        // Electron ortamında process.execPath'i kullan
+        return process.execPath;
+    } else {
+        // Normal ortamda node komutunu kullan
+        return 'node';
+    }
+}
+
+// Güvenli spawn fonksiyonu
+function safeSpawn(command, args, options = {}) {
+    if (isElectronMode) {
+        // Electron ortamında, fork kullanarak child process oluştur
+        const { fork } = require('child_process');
+        
+        // args'dan 'node' ve script adını ayır
+        const scriptName = args[0]; // 'index.js'
+        const scriptArgs = args.slice(1); // ['--auto'] gibi
+        
+        return fork(path.join(__dirname, scriptName), scriptArgs, {
+            cwd: options.cwd || __dirname,
+            silent: true,
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc'], // IPC channel eklendi
+            env: { ...process.env, ...options.env }
+        });
+    } else {
+        // Normal ortamda spawn kullan
+        const nodePath = getNodePath();
+        return spawn(nodePath, args, options);
+    }
+}
 
 // Package.json'dan versiyon bilgisini oku
 let packageInfo = {};
@@ -49,16 +160,6 @@ function emitLog(type, message) {
 app.use(express.static('public'));
 app.use(express.json());
 
-// API endpoint - config bilgilerini al
-app.get('/api/config', (req, res) => {
-    res.json({
-        version: packageInfo.version || '1.0.0',
-        name: packageInfo.name || 'APRS Position Sender',
-        callsign: process.env.CALLSIGN || 'N/A',
-        demoMode: process.env.DEMO_MODE === 'true'
-    });
-});
-
 // Ana sayfa
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -79,9 +180,81 @@ app.get('/api/config', (req, res) => {
         demoMode: process.env.DEMO_MODE === 'true',
         demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
         version: packageInfo.version || '1.0.0',
-        appName: packageInfo.name || 'APRS-FI',
+        appName: packageInfo.name || 'APRS Position Sender',
         isElectron: isElectronMode
     });
+});
+
+// Config güncelleme endpoint'i
+app.post('/api/config', (req, res) => {
+    try {
+        const {
+            callsign,
+            latitude,
+            longitude,
+            comment,
+            symbol,
+            path,
+            autoEnabled,
+            interval,
+            count,
+            demoMode
+        } = req.body;
+
+        // Config dosyasını oku
+        let configContent = '';
+        if (fs.existsSync(configPath)) {
+            configContent = fs.readFileSync(configPath, 'utf8');
+        }
+
+        // Mevcut değerleri güncelle
+        const configMap = {};
+        
+        // Mevcut config'i parse et
+        configContent.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+                const match = trimmed.match(/^([^=]+)=(.*)$/);
+                if (match) {
+                    const key = match[1].trim();
+                    const value = match[2].trim().replace(/^["']|["']$/g, '');
+                    configMap[key] = value;
+                }
+            }
+        });
+
+        // Yeni değerleri güncelle
+        if (callsign !== undefined) configMap['CALLSIGN'] = callsign;
+        if (latitude !== undefined) configMap['LATITUDE'] = latitude;
+        if (longitude !== undefined) configMap['LONGITUDE'] = longitude;
+        if (comment !== undefined) configMap['COMMENT'] = comment;
+        if (symbol !== undefined) configMap['SYMBOL'] = symbol;
+        if (path !== undefined) configMap['APRS_PATH'] = path;
+        if (autoEnabled !== undefined) configMap['AUTO_SEND_ENABLED'] = autoEnabled.toString();
+        if (interval !== undefined) configMap['AUTO_SEND_INTERVAL'] = interval;
+        if (count !== undefined) configMap['AUTO_SEND_COUNT'] = count;
+        if (demoMode !== undefined) configMap['DEMO_MODE'] = demoMode.toString();
+
+        // Config dosyasını yeniden oluştur
+        let newConfigContent = '';
+        for (const [key, value] of Object.entries(configMap)) {
+            newConfigContent += `${key}="${value}"\n`;
+        }
+
+        // Dosyayı yaz
+        fs.writeFileSync(configPath, newConfigContent);
+
+        // Environment variables'ı güncelle
+        for (const [key, value] of Object.entries(configMap)) {
+            process.env[key] = value;
+        }
+
+        log('Config güncellendi: ' + configPath);
+        res.json({ success: true, message: 'Konfigürasyon başarıyla güncellendi' });
+    } catch (error) {
+        console.error('Config güncellenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Konfigürasyon güncellenirken hata oluştu' });
+    }
 });
 
 // Aktif process'ler
@@ -136,7 +309,7 @@ io.on('connection', (socket) => {
 
         socket.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatılıyor...' });
         
-        activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
+        activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
             cwd: __dirname
         });
 
@@ -182,7 +355,7 @@ io.on('connection', (socket) => {
 
         socket.emit('log', { type: 'info', message: '📡 Tek gönderim başlatılıyor...' });
         
-        activeProcesses.send = spawn('node', ['index.js', '--send'], {
+        activeProcesses.send = safeSpawn('node', ['index.js', '--send'], {
             cwd: __dirname
         });
 
@@ -236,7 +409,7 @@ io.on('connection', (socket) => {
 
         socket.emit('log', { type: 'info', message: '📢 Durum bilgisi gönderiliyor...' });
         
-        const statusProcess = spawn('node', ['index.js', '--status'], {
+        const statusProcess = safeSpawn('node', ['index.js', '--status'], {
             cwd: __dirname
         });
 
@@ -356,9 +529,8 @@ server.listen(PORT, () => {
                 console.log('📡 Deployment sonrası otomatik APRS gönderimi başlatılıyor...');
                 
                 try {
-                    activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
-                        cwd: __dirname,
-                        stdio: ['pipe', 'pipe', 'pipe']
+                    activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
+                        cwd: __dirname
                     });
 
                     activeProcesses.auto.stdout.on('data', (data) => {

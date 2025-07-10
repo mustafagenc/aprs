@@ -3,6 +3,9 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
+// Electron modunu aktive et
+process.env.ELECTRON_MODE = 'true';
+
 // Geliştirme modunu kontrol et
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -112,10 +115,21 @@ function createWindow() {
 function startWebServer() {
     console.log('🚀 Web sunucusu başlatılıyor...');
     
-    // Web sunucu process'ini başlat
-    webServerProcess = spawn('node', ['web-server.js'], {
-        env: { ...process.env, ELECTRON_MODE: 'true' },
-        stdio: ['pipe', 'pipe', 'pipe']
+    // Electron ortamında fork kullan
+    const { fork } = require('child_process');
+    
+    // User data path'i al
+    const userDataPath = app.getPath('userData');
+    console.log(`📁 User data path: ${userDataPath}`);
+    
+    webServerProcess = fork(path.join(__dirname, 'web-server.js'), [], {
+        env: { 
+            ...process.env, 
+            ELECTRON_MODE: 'true',
+            USER_DATA_PATH: userDataPath
+        },
+        silent: true,
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc']
     });
 
     webServerProcess.stdout.on('data', (data) => {
@@ -299,21 +313,19 @@ Bu uygulama amatör telsiz operatörleri için geliştirilmiştir.`,
     tray.setContextMenu(contextMenu);
     tray.setToolTip('APRS Position Sender - Amatör Telsiz APRS Gönderici');
 
-    // Tray ikonuna tek tıklayınca - her zaman pencereyi ön plana getir
+    // Tray ikonuna tek tıklayınca - tüm platformlarda context menu aç
     tray.on('click', () => {
         console.log('Tray click event triggered - Platform:', process.platform);
-        if (mainWindow) {
-            console.log('Main window exists, bringing to front');
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-            // macOS'ta dock'ı tekrar göster
-            if (process.platform === 'darwin' && app.dock) {
-                app.dock.show();
-            }
-        } else {
-            console.log('Main window does not exist');
-        }
+        // Tüm platformlarda sol tıklama ile context menu aç
+        tray.popUpContextMenu();
+    });
+
+    // Sağ tıklama da zaten context menu açıyor (varsayılan davranış)
+    tray.on('right-click', () => {
+        console.log('Tray right-click event triggered');
+        // Context menu zaten otomatik açılır, ek bir şey yapmaya gerek yok
+        // Ama manuel olarak da açabiliriz
+        tray.popUpContextMenu();
     });
 
     // Tray ikonuna çift tıklayınca pencereyi göster (tüm platformlar için)
