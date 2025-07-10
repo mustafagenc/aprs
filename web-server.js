@@ -103,98 +103,109 @@ function getNodePath() {
 // Güvenli spawn fonksiyonu
 function safeSpawn(command, args, options = {}) {
     if (isElectronMode) {
-        // Electron ortamında, fork kullanarak child process oluştur
-        const { fork } = require('child_process');
-        
-        // args'dan 'node' ve script adını ayır
-        const scriptName = args[0]; // 'index.js'
-        const scriptArgs = args.slice(1); // ['--auto'] gibi
-        
-        // Script yolunu belirle - Electron packaged app'te doğru çalışması için
-        let scriptPath;
-        const appPath = process.env.APP_PATH || __dirname;
-        
-        // Packaged app detection
+        // Packaged Electron uygulamasında child process sorunları yaşanıyor
+        // macOS Gatekeeper ve asar dosyası sınırlamaları nedeniyle
         const isPackaged = process.env.APP_PATH && (
             process.env.APP_PATH.includes('app.asar') || 
             process.env.APP_PATH.includes('Resources/app')
         );
         
-        console.log(`🔧 Script path detection:`);
-        console.log(`   appPath: ${appPath}`);
-        console.log(`   isPackaged: ${isPackaged}`);
-        console.log(`   __dirname: ${__dirname}`);
-        
         if (isPackaged) {
-            // Packaged app - app.asar içindeki dosyalar
-            scriptPath = path.join(appPath, scriptName);
-        } else if (process.env.APP_PATH) {
-            // Environment'tan gelen app path
-            scriptPath = path.join(process.env.APP_PATH, scriptName);
+            console.log(`� Packaged app detected - child process disabled for macOS compatibility`);
+            // Packaged modda fake process döndür
+            const fakeProcess = {
+                stdout: { on: () => {} },
+                stderr: { on: () => {} },
+                on: (event, callback) => {
+                    if (event === 'close') {
+                        // Simulated success
+                        setTimeout(() => callback(0), 1000);
+                    } else if (event === 'error') {
+                        // Error handling placeholder
+                    }
+                },
+                kill: () => {}
+            };
+            
+            // APRS işlemini doğrudan çalıştır
+            const scriptName = args[0]; // 'index.js'
+            const scriptArgs = args.slice(1); // ['--auto'] gibi
+            
+            if (scriptArgs.includes('--auto')) {
+                console.log(`🚀 Running APRS auto mode directly in main thread...`);
+                setTimeout(() => {
+                    runAPRSAutoMode();
+                }, 1000);
+            } else if (scriptArgs.includes('--send')) {
+                console.log(`📡 Running APRS single send directly in main thread...`);
+                setTimeout(() => {
+                    runAPRSSingleSend();
+                }, 1000);
+            } else if (scriptArgs.includes('--status')) {
+                console.log(`� Running APRS status send directly in main thread...`);
+                setTimeout(() => {
+                    runAPRSStatusSend();
+                }, 1000);
+            }
+            
+            return fakeProcess;
         } else {
-            // Development mode - normal __dirname
-            scriptPath = path.join(__dirname, scriptName);
+            // Development mode - normal fork kullan
+            return forkAPRSProcess(command, args, options);
         }
-        
-        // Eğer script bulunamazsa farklı yolları dene
-        if (!fs.existsSync(scriptPath)) {
-            console.log(`⚠️ Script not found at: ${scriptPath}`);
-            
-            const fallbackPaths = [
-                path.join(__dirname, scriptName),
-                path.join(appPath, scriptName),
-                path.join(process.cwd(), scriptName)
-            ];
-            
-            for (const fallbackPath of fallbackPaths) {
-                console.log(`🔍 Trying fallback: ${fallbackPath}, exists: ${fs.existsSync(fallbackPath)}`);
-                if (fs.existsSync(fallbackPath)) {
-                    scriptPath = fallbackPath;
-                    break;
-                }
-            }
-        }
-        
-        console.log(`🔧 Electron modunda fork işlemi başlatılıyor:`);
-        console.log(`   Script: ${scriptPath}`);
-        console.log(`   Args: ${scriptArgs.join(' ')}`);
-        console.log(`   CWD: ${options.cwd || __dirname}`);
-        console.log(`   Script exists: ${fs.existsSync(scriptPath)}`);
-        
-        // Script dosyasının varlığını kontrol et
-        if (!fs.existsSync(scriptPath)) {
-            const error = new Error(`Script not found: ${scriptPath}`);
-            console.error(`❌ ${error.message}`);
-            throw error;
-        }
-        
-        const childProcess = fork(scriptPath, scriptArgs, {
-            cwd: process.env.APP_PATH || __dirname,
-            silent: false, // Logging için false yap
-            stdio: ['pipe', 'pipe', 'pipe', 'ipc'], // IPC channel eklendi
-            env: { ...process.env, ...options.env },
-            execArgv: [] // Parent process'in node flags'lerini kopyalama
-        });
-        
-        // Child process error handling
-        childProcess.on('error', (err) => {
-            console.error(`❌ Child process error (${scriptName}):`, err);
-        });
-        
-        childProcess.on('exit', (code, signal) => {
-            if (signal) {
-                console.log(`⚠️ Child process killed by signal: ${signal}`);
-            } else if (code !== 0) {
-                console.log(`⚠️ Child process exited with code: ${code}`);
-            }
-        });
-        
-        return childProcess;
     } else {
         // Normal ortamda spawn kullan
         const nodePath = getNodePath();
         return spawn(nodePath, args, options);
     }
+}
+
+// Development modunda fork kullan
+function forkAPRSProcess(command, args, options) {
+    const { fork } = require('child_process');
+    
+    // args'dan 'node' ve script adını ayır
+    const scriptName = args[0]; // 'index.js'
+    const scriptArgs = args.slice(1); // ['--auto'] gibi
+    
+    // Script yolunu belirle
+    const appPath = process.env.APP_PATH || __dirname;
+    const scriptPath = path.join(appPath, scriptName);
+    
+    console.log(`🔧 Fork process:`);
+    console.log(`   Script: ${scriptPath}`);
+    console.log(`   Args: ${scriptArgs.join(' ')}`);
+    console.log(`   Script exists: ${fs.existsSync(scriptPath)}`);
+    
+    // Script dosyasının varlığını kontrol et
+    if (!fs.existsSync(scriptPath)) {
+        const error = new Error(`Script not found: ${scriptPath}`);
+        console.error(`❌ ${error.message}`);
+        throw error;
+    }
+    
+    const childProcess = fork(scriptPath, scriptArgs, {
+        cwd: appPath,
+        silent: false,
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        env: { ...process.env, ...options.env },
+        execArgv: []
+    });
+    
+    // Child process error handling
+    childProcess.on('error', (err) => {
+        console.error(`❌ Child process error (${scriptName}):`, err);
+    });
+    
+    childProcess.on('exit', (code, signal) => {
+        if (signal) {
+            console.log(`⚠️ Child process killed by signal: ${signal}`);
+        } else if (code !== 0) {
+            console.log(`⚠️ Child process exited with code: ${code}`);
+        }
+    });
+    
+    return childProcess;
 }
 
 // Package.json'dan versiyon bilgisini oku
@@ -639,6 +650,107 @@ app.post('/send-status', async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 });
+
+// Packaged Electron uygulaması için in-thread APRS fonksiyonları
+// macOS'ta child process spawn sorunları nedeniyle bu fonksiyonlar kullanılır
+
+function runAPRSAutoMode() {
+    try {
+        console.log('🚀 APRS Auto mode starting in main thread...');
+        io.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatıldı (main thread)' });
+        
+        const sender = new APRSPositionSender();
+        
+        // Otomatik gönderim simülasyonu
+        let sendCount = 0;
+        const maxCount = parseInt(process.env.AUTO_SEND_COUNT || '10');
+        const interval = parseInt(process.env.AUTO_SEND_INTERVAL || '600') * 1000; // saniye -> milisaniye
+        
+        const autoInterval = setInterval(async () => {
+            try {
+                sendCount++;
+                io.emit('log', { type: 'info', message: `📡 Otomatik gönderim ${sendCount}/${maxCount}` });
+                
+                const success = await sender.sendPositionToAPRSIS();
+                if (success) {
+                    io.emit('log', { type: 'success', message: `✅ Paket ${sendCount} başarıyla gönderildi` });
+                } else {
+                    io.emit('log', { type: 'error', message: `❌ Paket ${sendCount} gönderilemedi` });
+                }
+                
+                if (sendCount >= maxCount) {
+                    clearInterval(autoInterval);
+                    io.emit('log', { type: 'info', message: '🏁 Otomatik gönderim tamamlandı' });
+                    io.emit('status', { auto: false, send: false });
+                }
+            } catch (error) {
+                io.emit('log', { type: 'error', message: `❌ Gönderim hatası: ${error.message}` });
+            }
+        }, interval);
+        
+        // Global olarak sakla ki durdurulabilsin
+        global.activeAutoInterval = autoInterval;
+        
+        io.emit('status', { auto: true, send: false });
+        
+    } catch (error) {
+        console.error('❌ Auto mode error:', error);
+        io.emit('log', { type: 'error', message: `❌ Otomatik gönderim hatası: ${error.message}` });
+        io.emit('status', { auto: false, send: false });
+    }
+}
+
+function runAPRSSingleSend() {
+    try {
+        console.log('📡 APRS Single send starting in main thread...');
+        io.emit('log', { type: 'info', message: '📡 Tek gönderim başlatıldı (main thread)' });
+        io.emit('status', { auto: !!global.activeAutoInterval, send: true });
+        
+        const sender = new APRSPositionSender();
+        
+        // Async olarak çalıştır
+        sender.sendPositionToAPRSIS().then(success => {
+            if (success) {
+                io.emit('log', { type: 'success', message: '✅ Tek gönderim başarıyla tamamlandı' });
+            } else {
+                io.emit('log', { type: 'error', message: '❌ Tek gönderim başarısız' });
+            }
+            io.emit('status', { auto: !!global.activeAutoInterval, send: false });
+        }).catch(error => {
+            io.emit('log', { type: 'error', message: `❌ Tek gönderim hatası: ${error.message}` });
+            io.emit('status', { auto: !!global.activeAutoInterval, send: false });
+        });
+        
+    } catch (error) {
+        console.error('❌ Single send error:', error);
+        io.emit('log', { type: 'error', message: `❌ Tek gönderim hatası: ${error.message}` });
+        io.emit('status', { auto: !!global.activeAutoInterval, send: false });
+    }
+}
+
+function runAPRSStatusSend() {
+    try {
+        console.log('📢 APRS Status send starting in main thread...');
+        io.emit('log', { type: 'info', message: '📢 Durum gönderimi başlatıldı (main thread)' });
+        
+        const sender = new APRSPositionSender();
+        
+        // Async olarak çalıştır
+        sender.sendStatusToAPRSIS().then(success => {
+            if (success) {
+                io.emit('log', { type: 'success', message: '✅ Durum gönderimi başarıyla tamamlandı' });
+            } else {
+                io.emit('log', { type: 'error', message: '❌ Durum gönderimi başarısız' });
+            }
+        }).catch(error => {
+            io.emit('log', { type: 'error', message: `❌ Durum gönderim hatası: ${error.message}` });
+        });
+        
+    } catch (error) {
+        console.error('❌ Status send error:', error);
+        io.emit('log', { type: 'error', message: `❌ Durum gönderim hatası: ${error.message}` });
+    }
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {

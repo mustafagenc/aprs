@@ -176,82 +176,102 @@ function startWebServer() {
     const appPath = getAppPath();
     console.log(`🔧 App path for web server: ${appPath}`);
     
-    // Her iki modda da fork kullan, sadece path'leri farklı ayarla
-    const { fork } = require('child_process');
-    
-    let webServerPath;
-    let workingDirectory;
-    
     if (isDev) {
-        // Development mode
-        webServerPath = path.join(__dirname, 'web-server.js');
-        workingDirectory = __dirname;
-    } else {
-        // Packaged mode - asar dosyasından çalıştır
-        webServerPath = path.join(appPath, 'web-server.js');
-        workingDirectory = appPath;
-    }
-    
-    console.log(`🔧 Web server script path: ${webServerPath}`);
-    console.log(`🔧 Working directory: ${workingDirectory}`);
-    console.log(`🔧 Script exists: ${fs.existsSync(webServerPath)}`);
-    
-    // Script dosyasının varlığını kontrol et
-    if (!fs.existsSync(webServerPath)) {
-        console.error(`❌ Web server script not found: ${webServerPath}`);
-        dialog.showErrorBox('Script Hatası', `Web server script bulunamadı: ${webServerPath}`);
-        return;
-    }
-    
-    webServerProcess = fork(webServerPath, [], {
-        env: { 
-            ...process.env, 
-            ELECTRON_MODE: 'true',
-            USER_DATA_PATH: userDataPath,
-            APP_PATH: isDev ? __dirname : appPath,
-            NODE_ENV: isDev ? 'development' : 'production'
-        },
-        silent: true,
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-        cwd: workingDirectory
-    });
-
-    // Process error handling
-    webServerProcess.on('error', (error) => {
-        console.error('❌ Web server process error:', error);
-        handleWebServerCrash();
-    });
-
-    webServerProcess.stdout.on('data', (data) => {
-        console.log(`Web Server: ${data}`);
-    });
-
-    webServerProcess.stderr.on('data', (data) => {
-        console.error(`Web Server Error: ${data}`);
-    });
-
-    webServerProcess.on('close', (code, signal) => {
-        console.log(`Web server process exited with code ${code}, signal: ${signal}`);
+        // Development modunda fork kullan
+        console.log('🔧 Development mode - using fork');
+        const { fork } = require('child_process');
         
-        // Eğer beklenmedik bir çıkış ise restart dene
-        if (code !== 0 && code !== null && !signal) {
-            console.warn('⚠️ Web server unexpected exit, attempting restart...');
+        const webServerPath = path.join(__dirname, 'web-server.js');
+        console.log(`🔧 Web server script path: ${webServerPath}`);
+        console.log(`🔧 Script exists: ${fs.existsSync(webServerPath)}`);
+        
+        if (!fs.existsSync(webServerPath)) {
+            console.error(`❌ Web server script not found: ${webServerPath}`);
+            showErrorPage(`Web server script bulunamadı: ${webServerPath}`);
+            return;
+        }
+        
+        webServerProcess = fork(webServerPath, [], {
+            env: { 
+                ...process.env, 
+                ELECTRON_MODE: 'true',
+                USER_DATA_PATH: userDataPath,
+                APP_PATH: __dirname,
+                NODE_ENV: 'development'
+            },
+            silent: true,
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+            cwd: __dirname
+        });
+
+        // Process error handling for dev mode
+        webServerProcess.on('error', (error) => {
+            console.error('❌ Web server process error:', error);
             handleWebServerCrash();
-        }
-    });
+        });
 
-    webServerProcess.on('exit', (code, signal) => {
-        console.log(`Web server process exit event: code ${code}, signal: ${signal}`);
-    });
+        webServerProcess.stdout.on('data', (data) => {
+            console.log(`Web Server: ${data}`);
+        });
 
-    // Web sunucusunun başlamasını bekle ve URL'yi yükle
-    setTimeout(() => {
-        const url = `http://localhost:${WEB_SERVER_PORT}`;
-        console.log(`📡 APRS-FI yükleniyor: ${url}`);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.loadURL(url);
+        webServerProcess.stderr.on('data', (data) => {
+            console.error(`Web Server Error: ${data}`);
+        });
+
+        webServerProcess.on('close', (code, signal) => {
+            console.log(`Web server process exited with code ${code}, signal: ${signal}`);
+            
+            if (code !== 0 && code !== null && !signal) {
+                console.warn('⚠️ Web server unexpected exit, attempting restart...');
+                handleWebServerCrash();
+            }
+        });
+
+        webServerProcess.on('exit', (code, signal) => {
+            console.log(`Web server process exit event: code ${code}, signal: ${signal}`);
+        });
+
+        // Web sunucusunun başlamasını bekle ve URL'yi yükle
+        setTimeout(() => {
+            const url = `http://localhost:${WEB_SERVER_PORT}`;
+            console.log(`📡 APRS-FI yükleniyor: ${url}`);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.loadURL(url);
+            }
+        }, 2000);
+        
+    } else {
+        // Packaged modunda main process'te web server çalıştır
+        console.log('📦 Packaged mode - starting web server in main process');
+        
+        try {
+            // Environment variables ayarla
+            process.env.ELECTRON_MODE = 'true';
+            process.env.USER_DATA_PATH = userDataPath;
+            process.env.APP_PATH = appPath;
+            process.env.NODE_ENV = 'production';
+            
+            console.log(`📦 Loading web server module...`);
+            
+            // Web server'ı main process'te require et
+            require('./web-server.js');
+            
+            console.log('✅ Web server started in main process');
+            
+            // Web sunucusunun başlamasını bekle ve URL'yi yükle
+            setTimeout(() => {
+                const url = `http://localhost:${WEB_SERVER_PORT}`;
+                console.log(`📡 APRS-FI yükleniyor: ${url}`);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.loadURL(url);
+                }
+            }, 3000);
+            
+        } catch (error) {
+            console.error('❌ Web server require error:', error);
+            showErrorPage(`Web server yükleme hatası: ${error.message}\n\nApp Path: ${appPath}\nUser Data: ${userDataPath}`);
         }
-    }, 2000);
+    }
 }
 
 /**
@@ -278,6 +298,81 @@ function handleWebServerCrash() {
     setTimeout(() => {
         startWebServer();
     }, 2000);
+}
+
+/**
+ * Hata sayfası göster
+ */
+function showErrorPage(errorMessage) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        const errorHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>APRS Position Sender - Hata</title>
+            <style>
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white; 
+                    padding: 40px; 
+                    margin: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                }
+                .error-container {
+                    background: rgba(0,0,0,0.3);
+                    padding: 40px;
+                    border-radius: 20px;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255,255,255,0.2);
+                    text-align: center;
+                    max-width: 600px;
+                }
+                h1 { color: #ff6b6b; margin-bottom: 20px; }
+                .error-details { 
+                    background: rgba(0,0,0,0.5); 
+                    padding: 20px; 
+                    border-radius: 10px; 
+                    margin: 20px 0; 
+                    font-family: monospace;
+                    word-break: break-all;
+                }
+                button {
+                    background: #4ecdc4;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    margin: 10px;
+                    font-size: 16px;
+                }
+                button:hover { background: #26d0ce; }
+            </style>
+        </head>
+        <body>
+            <div class="error-container">
+                <h1>🚨 APRS Position Sender Başlatma Hatası</h1>
+                <p>Uygulama başlatılırken bir hata oluştu:</p>
+                <div class="error-details">${errorMessage}</div>
+                <p>Lütfen aşağıdaki adımları deneyin:</p>
+                <ul style="text-align: left;">
+                    <li>Uygulamayı yeniden başlatın</li>
+                    <li>Sistem yeniden başlatılması gerekebilir</li>
+                    <li>Güvenlik duvarı APRS uygulamasını engelliyor olabilir</li>
+                    <li>Port 3000 başka bir uygulama tarafından kullanılıyor olabilir</li>
+                </ul>
+                <button onclick="location.reload()">🔄 Yeniden Dene</button>
+                <button onclick="require('electron').remote.getCurrentWindow().close()">❌ Kapat</button>
+            </div>
+        </body>
+        </html>`;
+        
+        mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(errorHtml)}`);
+    }
 }
 
 /**
