@@ -134,3 +134,20 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Electron build directories
+dist/
+build/
+out/
+electron-dist/
+release/
+electron-builder-effective-config.yaml
+
+# Platform specific builds
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.AppImage
+*.exe
+*.msi

@@ -1,10 +1,12 @@
 # 📡 APRS Position Sender
 
-Modern web arayüzlü Node.js APRS-IS konum gönderici uygulaması.
+Modern web arayüzlü Node.js APRS-IS konum gönderici uygulaması. **Web tarayıcısı** ve **Electron Desktop** modlarında çalışabilir.
 
 ## 🚀 Özellikler
 
 - ✅ **Modern Web Arayüzü** - Socket.IO ile canlı loglar ve kontrol
+- ✅ **Electron Desktop App** - Masaüstü uygulaması desteği
+- ✅ **Sistem Tepsisi** - Arka planda çalışma
 - ✅ **Uzay Temalı Tasarım** - Animasyonlu SVG uydu efektleri
 - ✅ **APRS-IS Gerçek Gönderim** - Euro.aprs2.net üzerinden
 - ✅ **Otomatik Periyodik Gönderim** - Sabit istasyon optimizasyonu
@@ -14,6 +16,35 @@ Modern web arayüzlü Node.js APRS-IS konum gönderici uygulaması.
 - ✅ **Responsive Tasarım** - Mobil ve masaüstü uyumlu
 - ✅ **Rate Limiting Koruması** - APRS ağı dostu
 - ✅ **Passcode Otomatik Hesaplama**
+- ✅ **Tam Ekran Log Görüntüleyici** - ESC ile kapatma
+
+## 🖥️ Desktop Uygulaması (Electron)
+
+### Kurulum
+```bash
+# Dependencies kur
+npm install
+
+# Development modunda çalıştır
+npm run electron-dev
+
+# Production modunda çalıştır  
+npm run electron
+
+# Platform-specific build
+npm run build-win    # Windows
+npm run build-mac    # macOS  
+npm run build-linux  # Linux
+npm run build        # Tüm platformlar
+```
+
+### Desktop Özellikleri
+- 🖥️ **Native masaüstü uygulaması**
+- 🔔 **Sistem tepsisi desteği**
+- ⌨️ **Klavye kısayolları** (F11: Tam ekran, F12: DevTools)
+- 🚪 **Tek instance** (Aynı anda sadece bir uygulama)
+- 📱 **Auto-updater** (gelecek versiyonlarda)
+- 💾 **Platform-specific dosya yolları**
 
 <details>
 <summary><strong>🚂 Railway Deployment (Tıklayın)</strong></summary>

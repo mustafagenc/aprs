@@ -1,6 +1,17 @@
 const net = require('net');
 require('dotenv').config();
 
+// Global error handlers
+process.on('uncaughtException', (error) => {
+	console.error('❌ Uncaught Exception:', error);
+	process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+	console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+	process.exit(1);
+});
+
 // Log wrapper - sadece console'a yaz (web-server.js zaten stdout'u yakalıyor)
 function log(message) {
 	console.log(message);

@@ -4,10 +4,209 @@ const socketIo = require('socket.io');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-require('dotenv').config();
+const os = require('os');
+
+// Config dosyası yönetimi
+let configPath;
+let userConfigPath;
+
+// Electron modunda config dosyasını kullanıcı dizinine kopyala
+if (process.env.ELECTRON_MODE === 'true') {
+    // Electron modunda, ana process'ten userDataPath gelecek
+    const userDataPath = process.env.USER_DATA_PATH;
+    if (userDataPath) {
+        userConfigPath = path.join(userDataPath, 'config.env');
+        configPath = userConfigPath;
+    } else {
+        // Fallback olarak home directory kullan
+        const userHome = os.homedir();
+        userConfigPath = path.join(userHome, '.aprs-config.env');
+        configPath = userConfigPath;
+    }
+} else {
+    // Normal modda proje dizinindeki .env dosyasını kullan
+    configPath = path.join(__dirname, '.env');
+}
+
+// Config dosyasını initialize et
+function initializeConfig() {
+    const defaultConfigPath = path.join(__dirname, '.env');
+    console.log(`🔧 Config initialize - Default path: ${defaultConfigPath}`);
+    console.log(`🔧 Config initialize - User path: ${userConfigPath}`);
+    
+    // Kullanıcı config dosyası yoksa varsayılan dosyayı kopyala
+    if (userConfigPath && !fs.existsSync(userConfigPath)) {
+        console.log(`📝 User config dosyası bulunamadı, oluşturuluyor...`);
+        try {
+            if (fs.existsSync(defaultConfigPath)) {
+                fs.copyFileSync(defaultConfigPath, userConfigPath);
+                console.log(`✅ Config dosyası kopyalandı: ${userConfigPath}`);
+            } else {
+                console.log(`⚠️ Varsayılan config dosyası bulunamadı, yeni oluşturuluyor...`);
+                // Varsayılan config dosyası yoksa boş bir dosya oluştur
+                const defaultConfig = `CALLSIGN="N0CALL"
+LATITUDE="0.0"
+LONGITUDE="0.0"
+COMMENT="APRS Position Sender"
+SYMBOL="/>"
+APRS_PATH="APRS"
+AUTO_SEND_ENABLED="false"
+AUTO_SEND_INTERVAL="600"
+AUTO_SEND_COUNT="10"
+DEMO_MODE="false"`;
+                fs.writeFileSync(userConfigPath, defaultConfig);
+                console.log(`✅ Varsayılan config dosyası oluşturuldu: ${userConfigPath}`);
+            }
+        } catch (error) {
+            console.error('❌ Config dosyası kopyalanırken hata:', error.message);
+        }
+    } else if (userConfigPath) {
+        console.log(`✅ User config dosyası mevcut: ${userConfigPath}`);
+    }
+}
+
+// Config'i yükle
+function loadConfig() {
+    console.log(`🔧 Config yükleniyor - ELECTRON_MODE: ${process.env.ELECTRON_MODE}`);
+    console.log(`📁 Config path: ${configPath}`);
+    console.log(`📁 User config path: ${userConfigPath}`);
+    
+    // Config dosyasını initialize et
+    initializeConfig();
+    
+    // Config dosyasını dotenv ile yükle
+    require('dotenv').config({ path: configPath });
+    
+    console.log(`✅ Config yüklendi - CALLSIGN: ${process.env.CALLSIGN}`);
+}
+
+// Config'i yükle
+loadConfig();
 
 // APRS sınıflarını import et
 const { APRSPositionSender, APRSISClient, calculatePasscode } = require('./index.js');
+
+// Electron modu kontrolü
+const isElectronMode = process.env.ELECTRON_MODE === 'true';
+
+// Node.js executable path'ini belirle
+function getNodePath() {
+    if (isElectronMode) {
+        // Electron ortamında process.execPath'i kullan
+        return process.execPath;
+    } else {
+        // Normal ortamda node komutunu kullan
+        return 'node';
+    }
+}
+
+// Güvenli spawn fonksiyonu
+function safeSpawn(command, args, options = {}) {
+    if (isElectronMode) {
+        // Packaged Electron uygulamasında child process sorunları yaşanıyor
+        // macOS Gatekeeper ve asar dosyası sınırlamaları nedeniyle
+        const isPackaged = process.env.APP_PATH && (
+            process.env.APP_PATH.includes('app.asar') || 
+            process.env.APP_PATH.includes('Resources/app')
+        );
+        
+        if (isPackaged) {
+            console.log(`� Packaged app detected - child process disabled for macOS compatibility`);
+            // Packaged modda fake process döndür
+            const fakeProcess = {
+                stdout: { on: () => {} },
+                stderr: { on: () => {} },
+                on: (event, callback) => {
+                    if (event === 'close') {
+                        // Simulated success
+                        setTimeout(() => callback(0), 1000);
+                    } else if (event === 'error') {
+                        // Error handling placeholder
+                    }
+                },
+                kill: () => {}
+            };
+            
+            // APRS işlemini doğrudan çalıştır
+            const scriptName = args[0]; // 'index.js'
+            const scriptArgs = args.slice(1); // ['--auto'] gibi
+            
+            if (scriptArgs.includes('--auto')) {
+                console.log(`🚀 Running APRS auto mode directly in main thread...`);
+                setTimeout(() => {
+                    runAPRSAutoMode();
+                }, 1000);
+            } else if (scriptArgs.includes('--send')) {
+                console.log(`📡 Running APRS single send directly in main thread...`);
+                setTimeout(() => {
+                    runAPRSSingleSend();
+                }, 1000);
+            } else if (scriptArgs.includes('--status')) {
+                console.log(`� Running APRS status send directly in main thread...`);
+                setTimeout(() => {
+                    runAPRSStatusSend();
+                }, 1000);
+            }
+            
+            return fakeProcess;
+        } else {
+            // Development mode - normal fork kullan
+            return forkAPRSProcess(command, args, options);
+        }
+    } else {
+        // Normal ortamda spawn kullan
+        const nodePath = getNodePath();
+        return spawn(nodePath, args, options);
+    }
+}
+
+// Development modunda fork kullan
+function forkAPRSProcess(command, args, options) {
+    const { fork } = require('child_process');
+    
+    // args'dan 'node' ve script adını ayır
+    const scriptName = args[0]; // 'index.js'
+    const scriptArgs = args.slice(1); // ['--auto'] gibi
+    
+    // Script yolunu belirle
+    const appPath = process.env.APP_PATH || __dirname;
+    const scriptPath = path.join(appPath, scriptName);
+    
+    console.log(`🔧 Fork process:`);
+    console.log(`   Script: ${scriptPath}`);
+    console.log(`   Args: ${scriptArgs.join(' ')}`);
+    console.log(`   Script exists: ${fs.existsSync(scriptPath)}`);
+    
+    // Script dosyasının varlığını kontrol et
+    if (!fs.existsSync(scriptPath)) {
+        const error = new Error(`Script not found: ${scriptPath}`);
+        console.error(`❌ ${error.message}`);
+        throw error;
+    }
+    
+    const childProcess = fork(scriptPath, scriptArgs, {
+        cwd: appPath,
+        silent: false,
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+        env: { ...process.env, ...options.env },
+        execArgv: []
+    });
+    
+    // Child process error handling
+    childProcess.on('error', (err) => {
+        console.error(`❌ Child process error (${scriptName}):`, err);
+    });
+    
+    childProcess.on('exit', (code, signal) => {
+        if (signal) {
+            console.log(`⚠️ Child process killed by signal: ${signal}`);
+        } else if (code !== 0) {
+            console.log(`⚠️ Child process exited with code: ${code}`);
+        }
+    });
+    
+    return childProcess;
+}
 
 // Package.json'dan versiyon bilgisini oku
 let packageInfo = {};
@@ -24,6 +223,16 @@ const server = http.createServer(app);
 const io = socketIo(server);
 
 const PORT = process.env.PORT || process.env.WEB_PORT || 3000;
+
+// Electron modunda farklı log çıktısı
+function log(message) {
+    const timestamp = new Date().toISOString();
+    if (isElectronMode) {
+        console.log(`[${timestamp}] ${message}`);
+    } else {
+        console.log(message);
+    }
+}
 
 // Log helper fonksiyonu - undefined döndürmesini engeller
 function emitLog(type, message) {
@@ -56,8 +265,81 @@ app.get('/api/config', (req, res) => {
         demoMode: process.env.DEMO_MODE === 'true',
         demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
         version: packageInfo.version || '1.0.0',
-        appName: packageInfo.name || 'APRS-FI'
+        appName: packageInfo.name || 'APRS Position Sender',
+        isElectron: isElectronMode
     });
+});
+
+// Config güncelleme endpoint'i
+app.post('/api/config', (req, res) => {
+    try {
+        const {
+            callsign,
+            latitude,
+            longitude,
+            comment,
+            symbol,
+            path,
+            autoEnabled,
+            interval,
+            count,
+            demoMode
+        } = req.body;
+
+        // Config dosyasını oku
+        let configContent = '';
+        if (fs.existsSync(configPath)) {
+            configContent = fs.readFileSync(configPath, 'utf8');
+        }
+
+        // Mevcut değerleri güncelle
+        const configMap = {};
+        
+        // Mevcut config'i parse et
+        configContent.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+                const match = trimmed.match(/^([^=]+)=(.*)$/);
+                if (match) {
+                    const key = match[1].trim();
+                    const value = match[2].trim().replace(/^["']|["']$/g, '');
+                    configMap[key] = value;
+                }
+            }
+        });
+
+        // Yeni değerleri güncelle
+        if (callsign !== undefined) configMap['CALLSIGN'] = callsign;
+        if (latitude !== undefined) configMap['LATITUDE'] = latitude;
+        if (longitude !== undefined) configMap['LONGITUDE'] = longitude;
+        if (comment !== undefined) configMap['COMMENT'] = comment;
+        if (symbol !== undefined) configMap['SYMBOL'] = symbol;
+        if (path !== undefined) configMap['APRS_PATH'] = path;
+        if (autoEnabled !== undefined) configMap['AUTO_SEND_ENABLED'] = autoEnabled.toString();
+        if (interval !== undefined) configMap['AUTO_SEND_INTERVAL'] = interval;
+        if (count !== undefined) configMap['AUTO_SEND_COUNT'] = count;
+        if (demoMode !== undefined) configMap['DEMO_MODE'] = demoMode.toString();
+
+        // Config dosyasını yeniden oluştur
+        let newConfigContent = '';
+        for (const [key, value] of Object.entries(configMap)) {
+            newConfigContent += `${key}="${value}"\n`;
+        }
+
+        // Dosyayı yaz
+        fs.writeFileSync(configPath, newConfigContent);
+
+        // Environment variables'ı güncelle
+        for (const [key, value] of Object.entries(configMap)) {
+            process.env[key] = value;
+        }
+
+        log('Config güncellendi: ' + configPath);
+        res.json({ success: true, message: 'Konfigürasyon başarıyla güncellendi' });
+    } catch (error) {
+        console.error('Config güncellenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Konfigürasyon güncellenirken hata oluştu' });
+    }
 });
 
 // Aktif process'ler
@@ -69,6 +351,11 @@ let activeProcesses = {
 // Socket.IO bağlantı yönetimi
 io.on('connection', (socket) => {
     console.log('🌐 Web arayüzü bağlandı:', socket.id);
+    
+    // Socket error handling
+    socket.on('error', (error) => {
+        console.error('Socket hatası:', error);
+    });
     
     // Konfigürasyonu gönder
     socket.emit('config', {
@@ -84,7 +371,8 @@ io.on('connection', (socket) => {
         demoMode: process.env.DEMO_MODE === 'true',
         demoMessage: process.env.DEMO_MESSAGE || 'Bu demo sürümüdür.',
         version: packageInfo.version || '1.0.0',
-        appName: packageInfo.name || 'APRS-FI'
+        appName: packageInfo.name || 'APRS-FI',
+        isElectron: isElectronMode
     });
     
     // Eğer otomatik process çalışıyorsa bunu bildir
@@ -95,94 +383,137 @@ io.on('connection', (socket) => {
 
     // Otomatik gönderim başlat
     socket.on('start-auto', () => {
-        // Demo mode kontrolü
-        if (process.env.DEMO_MODE === 'true') {
-            socket.emit('log', { 
-                type: 'warning', 
-                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+        try {
+            // Demo mode kontrolü
+            if (process.env.DEMO_MODE === 'true') {
+                socket.emit('log', { 
+                    type: 'warning', 
+                    message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+                });
+                return;
+            }
+
+            if (activeProcesses.auto) {
+                socket.emit('log', { type: 'warning', message: '⚠️ Otomatik gönderim zaten çalışıyor!' });
+                return;
+            }
+
+            socket.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatılıyor...' });
+            
+            activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
+                cwd: process.env.APP_PATH || __dirname
             });
-            return;
-        }
 
-        if (activeProcesses.auto) {
-            socket.emit('log', { type: 'warning', message: '⚠️ Otomatik gönderim zaten çalışıyor!' });
-            return;
-        }
+            // Process error handling
+            activeProcesses.auto.on('error', (err) => {
+                console.error('❌ Auto process error:', err);
+                io.emit('log', { type: 'error', message: `❌ Process hatası: ${err.message}` });
+                activeProcesses.auto = null;
+                io.emit('status', { auto: false, send: false });
+            });
 
-        socket.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatılıyor...' });
-        
-        activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
-            cwd: __dirname
-        });
+            activeProcesses.auto.stdout.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'info', message: message }); // Sadece tüm client'lara gönder
+                }
+            });
 
-        activeProcesses.auto.stdout.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'info', message: message }); // Sadece tüm client'lara gönder
-            }
-        });
+            activeProcesses.auto.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                }
+            });
 
-        activeProcesses.auto.stderr.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'error', message: `❌ ${message}` });
-            }
-        });
+            activeProcesses.auto.on('close', (code, signal) => {
+                activeProcesses.auto = null;
+                let message;
+                if (signal) {
+                    message = `🏁 Otomatik gönderim durduruldu (Signal: ${signal})`;
+                } else {
+                    message = `🏁 Otomatik gönderim tamamlandı (Exit code: ${code})`;
+                }
+                io.emit('log', { type: 'info', message: message });
+                io.emit('status', { auto: false, send: false });
+            });
 
-        activeProcesses.auto.on('close', (code) => {
+            // Process başlatıldığında durum güncelle
+            io.emit('status', { auto: true, send: false });
+            
+        } catch (error) {
+            console.error('❌ start-auto error:', error);
+            socket.emit('log', { type: 'error', message: `❌ Otomatik gönderim başlatılamadı: ${error.message}` });
             activeProcesses.auto = null;
-            const message = `🏁 Otomatik gönderim tamamlandı (Exit code: ${code})`;
-            io.emit('log', { type: 'info', message: message });
             io.emit('status', { auto: false, send: false });
-        });
-
-        io.emit('status', { auto: true, send: false });
+        }
     });
 
     // Tek gönderim
     socket.on('send-once', () => {
-        // Demo mode kontrolü
-        if (process.env.DEMO_MODE === 'true') {
-            socket.emit('log', { 
-                type: 'warning', 
-                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+        try {
+            // Demo mode kontrolü
+            if (process.env.DEMO_MODE === 'true') {
+                socket.emit('log', { 
+                    type: 'warning', 
+                    message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+                });
+                return;
+            }
+
+            if (activeProcesses.send) {
+                socket.emit('log', { type: 'warning', message: '⚠️ Gönderim zaten çalışıyor!' });
+                return;
+            }
+
+            socket.emit('log', { type: 'info', message: '📡 Tek gönderim başlatılıyor...' });
+            
+            activeProcesses.send = safeSpawn('node', ['index.js', '--send'], {
+                cwd: process.env.APP_PATH || __dirname
             });
-            return;
-        }
 
-        if (activeProcesses.send) {
-            socket.emit('log', { type: 'warning', message: '⚠️ Gönderim zaten çalışıyor!' });
-            return;
-        }
+            // Process error handling
+            activeProcesses.send.on('error', (err) => {
+                console.error('❌ Send process error:', err);
+                io.emit('log', { type: 'error', message: `❌ Gönderim hatası: ${err.message}` });
+                activeProcesses.send = null;
+                io.emit('status', { auto: !!activeProcesses.auto, send: false });
+            });
 
-        socket.emit('log', { type: 'info', message: '📡 Tek gönderim başlatılıyor...' });
-        
-        activeProcesses.send = spawn('node', ['index.js', '--send'], {
-            cwd: __dirname
-        });
+            activeProcesses.send.stdout.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'info', message: message });
+                }
+            });
 
-        activeProcesses.send.stdout.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
+            activeProcesses.send.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                }
+            });
+
+            activeProcesses.send.on('close', (code, signal) => {
+                activeProcesses.send = null;
+                let message;
+                if (signal) {
+                    message = `✅ Tek gönderim durduruldu (Signal: ${signal})`;
+                } else {
+                    message = `✅ Tek gönderim tamamlandı (Exit code: ${code})`;
+                }
                 io.emit('log', { type: 'info', message: message });
-            }
-        });
+                io.emit('status', { auto: !!activeProcesses.auto, send: false });
+            });
 
-        activeProcesses.send.stderr.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'error', message: `❌ ${message}` });
-            }
-        });
-
-        activeProcesses.send.on('close', (code) => {
+            io.emit('status', { auto: !!activeProcesses.auto, send: true });
+            
+        } catch (error) {
+            console.error('❌ send-once error:', error);
+            socket.emit('log', { type: 'error', message: `❌ Tek gönderim başlatılamadı: ${error.message}` });
             activeProcesses.send = null;
-            const message = `✅ Tek gönderim tamamlandı (Exit code: ${code})`;
-            io.emit('log', { type: 'info', message: message });
             io.emit('status', { auto: !!activeProcesses.auto, send: false });
-        });
-
-        io.emit('status', { auto: !!activeProcesses.auto, send: true });
+        }
     });
 
     // Process'leri durdur
@@ -200,44 +531,81 @@ io.on('connection', (socket) => {
 
     // Durum bilgisi gönder
     socket.on('send-status', () => {
-        // Demo mode kontrolü
-        if (process.env.DEMO_MODE === 'true') {
-            socket.emit('log', { 
-                type: 'warning', 
-                message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+        try {
+            // Demo mode kontrolü
+            if (process.env.DEMO_MODE === 'true') {
+                socket.emit('log', { 
+                    type: 'warning', 
+                    message: `🚫 ${process.env.DEMO_MESSAGE || 'Bu demo sürümüdür. APRS gönderimi devre dışıdır.'}` 
+                });
+                return;
+            }
+
+            socket.emit('log', { type: 'info', message: '📢 Durum bilgisi gönderiliyor...' });
+            
+            const statusProcess = safeSpawn('node', ['index.js', '--status'], {
+                cwd: process.env.APP_PATH || __dirname
             });
-            return;
-        }
 
-        socket.emit('log', { type: 'info', message: '📢 Durum bilgisi gönderiliyor...' });
-        
-        const statusProcess = spawn('node', ['index.js', '--status'], {
-            cwd: __dirname
-        });
+            // Process error handling
+            statusProcess.on('error', (err) => {
+                console.error('❌ Status process error:', err);
+                io.emit('log', { type: 'error', message: `❌ Durum gönderim hatası: ${err.message}` });
+            });
 
-        statusProcess.stdout.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
+            statusProcess.stdout.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'info', message: message });
+                }
+            });
+
+            statusProcess.stderr.on('data', (data) => {
+                const message = data.toString().trim();
+                if (message) {
+                    io.emit('log', { type: 'error', message: `❌ ${message}` });
+                }
+            });
+
+            statusProcess.on('close', (code, signal) => {
+                let message;
+                if (signal) {
+                    message = `📢 Durum gönderimi durduruldu (Signal: ${signal})`;
+                } else {
+                    message = `📢 Durum gönderimi tamamlandı (Exit code: ${code})`;
+                }
                 io.emit('log', { type: 'info', message: message });
-            }
-        });
-
-        statusProcess.stderr.on('data', (data) => {
-            const message = data.toString().trim();
-            if (message) {
-                io.emit('log', { type: 'error', message: `❌ ${message}` });
-            }
-        });
-
-        statusProcess.on('close', (code) => {
-            const message = `📢 Durum gönderimi tamamlandı (Exit code: ${code})`;
-            io.emit('log', { type: 'info', message: message });
-        });
+            });
+            
+        } catch (error) {
+            console.error('❌ send-status error:', error);
+            socket.emit('log', { type: 'error', message: `❌ Durum gönderimi başlatılamadı: ${error.message}` });
+        }
     });
 
     // Bağlantı koptuğunda
-    socket.on('disconnect', () => {
-        console.log('🌐 Web arayüzü bağlantısı kesildi:', socket.id);
+    socket.on('disconnect', (reason) => {
+        console.log(`🌐 Web arayüzü bağlantısı kesildi: ${socket.id} - Neden: ${reason}`);
+        
+        // Bağlantı kopma nedenini logla
+        if (reason === 'io server disconnect') {
+            console.log('⚠️ Sunucu tarafından bağlantı kapatıldı');
+        } else if (reason === 'io client disconnect') {
+            console.log('⚠️ İstemci tarafından bağlantı kapatıldı');
+        } else if (reason === 'ping timeout') {
+            console.log('⚠️ Ping timeout - bağlantı zaman aşımı');
+        } else if (reason === 'transport close') {
+            console.log('⚠️ Transport kapandı');
+        } else if (reason === 'transport error') {
+            console.log('⚠️ Transport hatası');
+        } else {
+            console.log(`⚠️ Bilinmeyen neden: ${reason}`);
+        }
+    });
+
+    // Bağlantı hatası durumunda
+    socket.on('connect_error', (error) => {
+        console.error('🔌 Socket bağlantı hatası:', error);
     });
 
     // Mevcut durum bilgisi gönder
@@ -283,6 +651,107 @@ app.post('/send-status', async (req, res) => {
     }
 });
 
+// Packaged Electron uygulaması için in-thread APRS fonksiyonları
+// macOS'ta child process spawn sorunları nedeniyle bu fonksiyonlar kullanılır
+
+function runAPRSAutoMode() {
+    try {
+        console.log('🚀 APRS Auto mode starting in main thread...');
+        io.emit('log', { type: 'info', message: '🚀 Otomatik gönderim başlatıldı (main thread)' });
+        
+        const sender = new APRSPositionSender();
+        
+        // Otomatik gönderim simülasyonu
+        let sendCount = 0;
+        const maxCount = parseInt(process.env.AUTO_SEND_COUNT || '10');
+        const interval = parseInt(process.env.AUTO_SEND_INTERVAL || '600') * 1000; // saniye -> milisaniye
+        
+        const autoInterval = setInterval(async () => {
+            try {
+                sendCount++;
+                io.emit('log', { type: 'info', message: `📡 Otomatik gönderim ${sendCount}/${maxCount}` });
+                
+                const success = await sender.sendPositionToAPRSIS();
+                if (success) {
+                    io.emit('log', { type: 'success', message: `✅ Paket ${sendCount} başarıyla gönderildi` });
+                } else {
+                    io.emit('log', { type: 'error', message: `❌ Paket ${sendCount} gönderilemedi` });
+                }
+                
+                if (sendCount >= maxCount) {
+                    clearInterval(autoInterval);
+                    io.emit('log', { type: 'info', message: '🏁 Otomatik gönderim tamamlandı' });
+                    io.emit('status', { auto: false, send: false });
+                }
+            } catch (error) {
+                io.emit('log', { type: 'error', message: `❌ Gönderim hatası: ${error.message}` });
+            }
+        }, interval);
+        
+        // Global olarak sakla ki durdurulabilsin
+        global.activeAutoInterval = autoInterval;
+        
+        io.emit('status', { auto: true, send: false });
+        
+    } catch (error) {
+        console.error('❌ Auto mode error:', error);
+        io.emit('log', { type: 'error', message: `❌ Otomatik gönderim hatası: ${error.message}` });
+        io.emit('status', { auto: false, send: false });
+    }
+}
+
+function runAPRSSingleSend() {
+    try {
+        console.log('📡 APRS Single send starting in main thread...');
+        io.emit('log', { type: 'info', message: '📡 Tek gönderim başlatıldı (main thread)' });
+        io.emit('status', { auto: !!global.activeAutoInterval, send: true });
+        
+        const sender = new APRSPositionSender();
+        
+        // Async olarak çalıştır
+        sender.sendPositionToAPRSIS().then(success => {
+            if (success) {
+                io.emit('log', { type: 'success', message: '✅ Tek gönderim başarıyla tamamlandı' });
+            } else {
+                io.emit('log', { type: 'error', message: '❌ Tek gönderim başarısız' });
+            }
+            io.emit('status', { auto: !!global.activeAutoInterval, send: false });
+        }).catch(error => {
+            io.emit('log', { type: 'error', message: `❌ Tek gönderim hatası: ${error.message}` });
+            io.emit('status', { auto: !!global.activeAutoInterval, send: false });
+        });
+        
+    } catch (error) {
+        console.error('❌ Single send error:', error);
+        io.emit('log', { type: 'error', message: `❌ Tek gönderim hatası: ${error.message}` });
+        io.emit('status', { auto: !!global.activeAutoInterval, send: false });
+    }
+}
+
+function runAPRSStatusSend() {
+    try {
+        console.log('📢 APRS Status send starting in main thread...');
+        io.emit('log', { type: 'info', message: '📢 Durum gönderimi başlatıldı (main thread)' });
+        
+        const sender = new APRSPositionSender();
+        
+        // Async olarak çalıştır
+        sender.sendStatusToAPRSIS().then(success => {
+            if (success) {
+                io.emit('log', { type: 'success', message: '✅ Durum gönderimi başarıyla tamamlandı' });
+            } else {
+                io.emit('log', { type: 'error', message: '❌ Durum gönderimi başarısız' });
+            }
+        }).catch(error => {
+            io.emit('log', { type: 'error', message: `❌ Durum gönderim hatası: ${error.message}` });
+        });
+        
+    } catch (error) {
+        console.error('❌ Status send error:', error);
+        io.emit('log', { type: 'error', message: `❌ Durum gönderim hatası: ${error.message}` });
+    }
+}
+
 // Graceful shutdown
 process.on('SIGINT', () => {
     console.log('\n🛑 Web server kapatılıyor...');
@@ -301,13 +770,19 @@ process.on('SIGINT', () => {
 });
 
 server.listen(PORT, () => {
-    console.log(`🌐 APRS Web Arayüzü çalışıyor: http://localhost:${PORT}`);
-    console.log(`📡 APRS gönderimlerini web üzerinden kontrol edebilirsiniz`);
+    if (isElectronMode) {
+        console.log(`🖥️  APRS-FI Desktop sunucusu başlatıldı: http://localhost:${PORT}`);
+        console.log(`📡 Electron modu aktif - Desktop uygulaması hazır`);
+    } else {
+        console.log(`🌐 APRS Web Arayüzü çalışıyor: http://localhost:${PORT}`);
+        console.log(`📡 APRS gönderimlerini web üzerinden kontrol edebilirsiniz`);
+    }
     
     // Environment variables debug
     console.log(`🔍 AUTO_START_ON_DEPLOY: ${process.env.AUTO_START_ON_DEPLOY}`);
     console.log(`🔍 DEMO_MODE: ${process.env.DEMO_MODE}`);
     console.log(`🔍 CALLSIGN: ${process.env.CALLSIGN}`);
+    console.log(`🔍 ELECTRON_MODE: ${isElectronMode}`);
     
     // Sunucu başlarken otomatik gönderimi başlat
     if (process.env.AUTO_START_ON_DEPLOY === 'true') {
@@ -325,9 +800,8 @@ server.listen(PORT, () => {
                 console.log('📡 Deployment sonrası otomatik APRS gönderimi başlatılıyor...');
                 
                 try {
-                    activeProcesses.auto = spawn('node', ['index.js', '--auto'], {
-                        cwd: __dirname,
-                        stdio: ['pipe', 'pipe', 'pipe']
+                    activeProcesses.auto = safeSpawn('node', ['index.js', '--auto'], {
+                        cwd: process.env.APP_PATH || __dirname
                     });
 
                     activeProcesses.auto.stdout.on('data', (data) => {
